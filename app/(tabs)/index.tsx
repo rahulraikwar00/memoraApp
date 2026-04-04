@@ -1,98 +1,143 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useCallback } from 'react';
+import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { useBookmarkStore } from '../../stores/useBookmarkStore';
+import { useThemeStore } from '../../stores/useThemeStore';
+import BookmarkCard from '../../components/BookmarkCard';
+import EmptyState from '../../components/EmptyState';
+import SkeletonCard from '../../components/SkeletonCard';
+import { Bookmark } from '../../lib/db';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function LibraryScreen() {
+  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic } = useBookmarkStore();
+  const { colors, spacing } = useThemeStore();
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+  useEffect(() => {
+    loadBookmarks();
+  }, [loadBookmarks]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'Delete Bookmark',
+      'Are you sure you want to delete this bookmark?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => removeBookmark(id) },
+      ]
+    );
+  }, [removeBookmark]);
+
+  const handleTogglePublic = useCallback(async (id: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await togglePublic(id);
+  }, [togglePublic]);
+
+  const renderRightActions = useCallback(() => {
+    return (
+      <View style={styles.swipeActions}>
+        <View style={[styles.swipeAction, { backgroundColor: colors.accent }]} />
+      </View>
+    );
+  }, [colors.accent]);
+
+  const renderLeftActions = useCallback(() => {
+    return (
+      <View style={styles.swipeActions}>
+        <View style={[styles.swipeAction, { backgroundColor: colors.danger }]} />
+      </View>
+    );
+  }, [colors.danger]);
+
+  const renderItem = useCallback(({ item }: { item: Bookmark }) => {
+    return (
+      <Swipeable
+        renderRightActions={renderRightActions}
+        renderLeftActions={renderLeftActions}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'left') {
+            handleDelete(item.id);
+          } else if (direction === 'right') {
+            handleTogglePublic(item.id);
+          }
+        }}
+      >
+        <BookmarkCard
+          bookmark={item}
+          onPress={() => Linking.openURL(item.url)}
+          onDelete={() => handleDelete(item.id)}
+          onTogglePublic={() => handleTogglePublic(item.id)}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      </Swipeable>
+    );
+  }, [handleDelete, handleTogglePublic, renderRightActions, renderLeftActions]);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const renderSkeleton = () => (
+    <View>
+      <SkeletonCard hasImage />
+      <SkeletonCard hasImage={false} />
+    </View>
+  );
+
+  if (isLoading && bookmarks.length === 0) {
+    return (
+      <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.list, { padding: spacing.lg }]}>
+          {renderSkeleton()}
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={bookmarks}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.list,
+          { padding: spacing.lg },
+          bookmarks.length === 0 && styles.emptyList
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadBookmarks}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon="bookmark-outline"
+            title="No bookmarks yet"
+            message="Save your first link from the Save tab to get started"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+  },
+  list: {},
+  emptyList: {
+    flex: 1,
+  },
+  swipeActions: {
+    width: 80,
+    marginBottom: 12,
+  },
+  swipeAction: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+    borderRadius: 12,
   },
 });

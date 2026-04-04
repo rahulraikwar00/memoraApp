@@ -1,24 +1,101 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { initDatabase } from '../lib/db';
+import { startSyncWorker } from '../lib/sync';
+import { useAuthStore } from '../stores/useAuthStore';
+import { colors } from '../constants/theme';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.log('Initializing database...');
+    initDatabase()
+      .then(async () => {
+        console.log('Database initialized successfully');
+        
+        // Load auth token and start sync worker
+        await useAuthStore.getState().loadToken();
+        startSyncWorker();
+        console.log('Sync worker started');
+        
+        setIsReady(true);
+      })
+      .catch((err) => {
+        console.error('Database init failed:', err);
+        setError(err.message || 'Unknown error');
+      });
+  }, []);
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorTitle}>Database Error</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.hint}>Try: npx expo start -c to clear cache</Text>
+      </View>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <>
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTintColor: colors.textPrimary,
+          contentStyle: {
+            backgroundColor: colors.background,
+          },
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.danger,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  hint: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    marginTop: 16,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+});
