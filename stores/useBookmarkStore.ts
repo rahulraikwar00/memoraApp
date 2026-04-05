@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Bookmark, getBookmarks, createBookmark, deleteBookmark, toggleBookmarkPublic, searchBookmarks } from '../lib/db';
+import { Bookmark, getBookmarks, createBookmark, deleteBookmark, toggleBookmarkPublic, toggleBookmarkFavorite, searchBookmarks } from '../lib/db';
 
 interface BookmarkState {
   bookmarks: Bookmark[];
@@ -7,9 +7,10 @@ interface BookmarkState {
   error: string | null;
   searchQuery: string;
   loadBookmarks: () => Promise<void>;
-  addBookmark: (data: Omit<Bookmark, 'id' | 'created_at' | 'updated_at' | 'synced_at' | 'is_deleted'>) => Promise<Bookmark | null>;
+  addBookmark: (data: Omit<Bookmark, 'id' | 'created_at' | 'updated_at' | 'synced_at' | 'is_deleted' | 'is_favorite'>) => Promise<Bookmark | null>;
   removeBookmark: (id: string) => Promise<void>;
   togglePublic: (id: string) => Promise<void>;
+  toggleFavorite: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   performSearch: (query: string) => Promise<void>;
   clearError: () => void;
@@ -63,6 +64,18 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   togglePublic: async (id: string) => {
     try {
       const updated = await toggleBookmarkPublic(id);
+      if (updated) {
+        const { bookmarks } = get();
+        set({ bookmarks: bookmarks.map(b => b.id === id ? updated : b) });
+      }
+    } catch (err) {
+      set({ error: (err as Error).message });
+    }
+  },
+
+  toggleFavorite: async (id: string) => {
+    try {
+      const updated = await toggleBookmarkFavorite(id);
       if (updated) {
         const { bookmarks } = get();
         set({ bookmarks: bookmarks.map(b => b.id === id ? updated : b) });

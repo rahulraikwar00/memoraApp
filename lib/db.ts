@@ -9,6 +9,7 @@ export interface Bookmark {
   domain: string | null;
   tags: string;
   is_public: number;
+  is_favorite: number;
   local_path: string | null;
   created_at: number;
   updated_at: number;
@@ -114,6 +115,14 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
       // Column already exists
     }
 
+    try {
+      await database.execAsync(
+        `ALTER TABLE bookmarks ADD COLUMN is_favorite INTEGER DEFAULT 0`,
+      );
+    } catch {
+      // Column already exists
+    }
+
     for (const idx of createIndexes) {
       try {
         await database.execAsync(idx);
@@ -172,7 +181,7 @@ export async function getBookmarkById(id: string): Promise<Bookmark | null> {
 export async function createBookmark(
   data: Omit<
     Bookmark,
-    "id" | "created_at" | "updated_at" | "synced_at" | "is_deleted"
+    "id" | "created_at" | "updated_at" | "synced_at" | "is_deleted" | "is_favorite"
   >,
 ): Promise<Bookmark> {
   const database = await getDb();
@@ -181,8 +190,8 @@ export async function createBookmark(
   const now = Date.now();
 
   await database.runAsync(
-    `INSERT INTO bookmarks (id, url, title, description, image_url, domain, tags, is_public, local_path, created_at, updated_at, synced_at, is_deleted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO bookmarks (id, url, title, description, image_url, domain, tags, is_public, is_favorite, local_path, created_at, updated_at, synced_at, is_deleted)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.url,
@@ -192,6 +201,7 @@ export async function createBookmark(
       data.domain,
       data.tags,
       data.is_public,
+      0,
       data.local_path || null,
       now,
       now,
@@ -210,6 +220,7 @@ export async function createBookmark(
     updated_at: now,
     synced_at: null,
     is_deleted: 0,
+    is_favorite: 0,
   };
 }
 
@@ -292,6 +303,18 @@ export async function toggleBookmarkPublic(
 
   const newPublic = bookmark.is_public ? 0 : 1;
   await updateBookmark(id, { is_public: newPublic });
+
+  return getBookmarkById(id);
+}
+
+export async function toggleBookmarkFavorite(
+  id: string,
+): Promise<Bookmark | null> {
+  const bookmark = await getBookmarkById(id);
+  if (!bookmark) return null;
+
+  const newFavorite = bookmark.is_favorite ? 0 : 1;
+  await updateBookmark(id, { is_favorite: newFavorite });
 
   return getBookmarkById(id);
 }

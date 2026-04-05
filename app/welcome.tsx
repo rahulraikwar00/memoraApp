@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Image } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../constants/theme';
 import { generateRandomUsername, getAvatarUrl, saveUser } from '../lib/user';
 import { authApi } from '../lib/api';
@@ -15,8 +16,10 @@ const FEATURES = [
 ];
 
 export default function WelcomeScreen() {
+  const insets = useSafeAreaInsets();
   const [screen, setScreen] = useState(1);
-  const [username, setUsername] = useState('');
+  const [previewUsername, setPreviewUsername] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [availability, setAvailability] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -53,10 +56,19 @@ export default function WelcomeScreen() {
     }
   }, [screen]);
 
+  // Generate preview avatar for screen 1
+  useEffect(() => {
+    if (screen === 1 && !previewUsername) {
+      const random = generateRandomUsername();
+      setPreviewUsername(random);
+    }
+  }, [screen]);
+
+  const previewAvatarUrl = previewUsername ? getAvatarUrl(previewUsername) : null;
   const avatarUrl = username ? getAvatarUrl(username) : null;
 
   const handleContinue = async () => {
-    if (!username.trim() || !availability) return;
+    if (!username || !username.trim() || !availability) return;
     
     setIsLoading(true);
     setError(null);
@@ -93,7 +105,7 @@ export default function WelcomeScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: spacing.xl + insets.top }]}>
         {screen === 1 ? (
           <View style={styles.welcomeContent}>
             <View style={styles.logoContainer}>
@@ -104,6 +116,20 @@ export default function WelcomeScreen() {
             <Text style={[styles.tagline, { color: colors.textSecondary }]}>
               Your personal bookmark space
             </Text>
+
+            <View style={[styles.avatarContainer, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: spacing.xl }]}>
+              {previewAvatarUrl ? (
+                <Image
+                  source={{ uri: previewAvatarUrl }}
+                  style={styles.avatar}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={40} color={colors.textTertiary} />
+                </View>
+              )}
+            </View>
 
             <View style={styles.features}>
               {FEATURES.map((feature, index) => (
@@ -141,12 +167,16 @@ export default function WelcomeScreen() {
             </Text>
 
             <View style={[styles.avatarContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {avatarUrl && (
+              {avatarUrl ? (
                 <Image
                   source={{ uri: avatarUrl }}
                   style={styles.avatar}
                   resizeMode="cover"
                 />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={40} color={colors.textTertiary} />
+                </View>
               )}
             </View>
 
@@ -163,7 +193,7 @@ export default function WelcomeScreen() {
                 <Text style={[styles.statusText, { color: colors.danger }]}>Username taken</Text>
               </View>
             )}
-            {!isChecking && availability === true && username.length >= 3 && (
+            {!isChecking && availability === true && username && username.length >= 3 && (
               <View style={styles.statusRow}>
                 <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
                 <Text style={[styles.statusText, { color: '#4CAF50' }]}>Available!</Text>
@@ -175,7 +205,7 @@ export default function WelcomeScreen() {
                 styles.input,
                 { backgroundColor: colors.card, borderColor: inputBorderColor, color: colors.textPrimary }
               ]}
-              value={username}
+              value={username ?? ''}
               onChangeText={(text) => {
                 setUsername(text.toLowerCase().replace(/\s+/g, '-'));
                 setAvailability(null);
@@ -218,7 +248,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
     justifyContent: 'center',
   },
   welcomeContent: {
@@ -314,6 +344,13 @@ const styles = StyleSheet.create({
   avatar: {
     width: '100%',
     height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
   },
   input: {
     width: '100%',

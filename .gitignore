@@ -3,6 +3,7 @@
 .kilo
 # dependencies
 node_modules/
+server/database.db
 
 # Expo
 .expo/

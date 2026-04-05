@@ -21,6 +21,7 @@ interface GridBookmarkCardProps {
   onPress?: () => void;
   onOpenLink?: () => void;
   onTogglePublic?: () => void;
+  onToggleFavorite?: () => void;
   onEdit?: () => void;
   onShare?: () => void;
   onCopyUrl?: () => void;
@@ -47,6 +48,7 @@ export default function GridBookmarkCard({
   onPress,
   onOpenLink,
   onTogglePublic,
+  onToggleFavorite,
   onEdit,
   onShare,
   onCopyUrl,
@@ -111,7 +113,7 @@ export default function GridBookmarkCard({
       const { sound } = await Audio.Sound.createAsync(
         { uri: bookmark.local_path },
         { shouldPlay: true },
-        (status) => {
+        (status: any) => {
           if (status.isLoaded && status.didJustFinish) {
             setIsPlaying(false);
             soundRef.current?.setPositionAsync(0);
@@ -166,6 +168,16 @@ export default function GridBookmarkCard({
   const handleVotePress = (e: any) => {
     e.stopPropagation();
     onVote?.();
+  };
+
+  const handleCopyPress = (e: any) => {
+    e.stopPropagation();
+    onCopyUrl?.();
+  };
+
+  const handleFavoritePress = (e: any) => {
+    e.stopPropagation();
+    onToggleFavorite?.();
   };
 
   const renderPreview = () => {
@@ -276,9 +288,21 @@ export default function GridBookmarkCard({
             >
               {contentType === 'link' ? domain : getContentIcon(contentType)}
             </Text>
-            <Pressable onPress={handleOptionsPress} style={styles.optionsButton}>
-              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textTertiary} />
-            </Pressable>
+            <View style={styles.quickActions}>
+              <Pressable onPress={handleCopyPress} style={styles.quickActionBtn}>
+                <Ionicons name="copy-outline" size={14} color={colors.textTertiary} />
+              </Pressable>
+              <Pressable onPress={handleFavoritePress} style={styles.quickActionBtn}>
+                <Ionicons 
+                  name={bookmark.is_favorite ? "heart" : "heart-outline"} 
+                  size={14} 
+                  color={bookmark.is_favorite ? colors.accent : colors.textTertiary} 
+                />
+              </Pressable>
+              <Pressable onPress={handleOptionsPress} style={styles.quickActionBtn}>
+                <Ionicons name="ellipsis-horizontal" size={14} color={colors.textTertiary} />
+              </Pressable>
+            </View>
           </View>
 
           <Text
@@ -396,6 +420,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "400",
     flex: 1,
+  },
+  quickActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  quickActionBtn: {
+    padding: 2,
   },
   optionsButton: {
     padding: 2,

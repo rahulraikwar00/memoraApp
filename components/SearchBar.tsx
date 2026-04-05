@@ -8,12 +8,41 @@ interface SearchBarProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  activeFilter?: string;
+  onFilterChange?: (filter: string) => void;
 }
 
-export default function SearchBar({ value, onChangeText, placeholder = 'Search...', autoFocus }: SearchBarProps) {
+const TYPE_FILTERS = [
+  { key: 'all', icon: 'apps' },
+  { key: 'link', icon: 'link' },
+  { key: 'image', icon: 'image' },
+  { key: 'note', icon: 'document-text' },
+  { key: 'voice', icon: 'mic' },
+];
+
+export default function SearchBar({ value, onChangeText, placeholder = 'Search...', autoFocus, activeFilter = 'all', onFilterChange }: SearchBarProps) {
   return (
     <View style={styles.container}>
-      <Ionicons name="search" size={20} color={colors.textTertiary} style={styles.icon} />
+      <View style={styles.filtersRow}>
+        {TYPE_FILTERS.map((filter) => (
+          <Pressable
+            key={filter.key}
+            style={[
+              styles.filterBtn,
+              activeFilter === filter.key && styles.filterBtnActive
+            ]}
+            onPress={() => onFilterChange?.(filter.key)}
+          >
+            <Ionicons 
+              name={filter.icon as any} 
+              size={16} 
+              color={activeFilter === filter.key ? colors.textPrimary : colors.textTertiary} 
+            />
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.divider} />
+      <Ionicons name="search" size={18} color={colors.textTertiary} style={styles.icon} />
       <TextInput
         style={styles.input}
         value={value}
@@ -26,7 +55,7 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Search..
       />
       {value.length > 0 && (
         <Pressable onPress={() => onChangeText('')}>
-          <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
+          <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
         </Pressable>
       )}
     </View>
@@ -39,10 +68,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-    height: 48,
+    paddingHorizontal: spacing.sm,
+    height: 44,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  filterBtn: {
+    padding: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  filterBtnActive: {
+    backgroundColor: colors.accent,
+  },
+  divider: {
+    width: 1,
+    height: 20,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.sm,
   },
   icon: {
     marginRight: spacing.sm,

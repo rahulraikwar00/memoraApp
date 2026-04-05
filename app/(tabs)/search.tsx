@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, FlatList, StyleSheet, ScrollView, Pressable, Text } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, FlatList, StyleSheet, Pressable, Text } from 'react-native';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import SearchBar from '../../components/SearchBar';
@@ -67,51 +66,16 @@ export default function SearchScreen() {
     });
   }, [bookmarks, activeTypeFilter, activeTagFilter]);
 
-  const renderFilterChips = () => (
+  const renderTagFilters = () => (
     <View 
-      style={[styles.filterContainer, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md }]}
+      style={[styles.tagFilterContainer, { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }]}
     >
-      <View style={[styles.filterRow, { gap: spacing.sm }]}>
-        {TYPE_FILTERS.map((filter) => (
-          <Pressable
-            key={filter.key}
-            style={[
-              styles.filterChip,
-              { 
-                backgroundColor: colors.card, 
-                borderColor: colors.border, 
-                borderRadius: borderRadius.pill,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.sm,
-              },
-              activeTypeFilter === filter.key && {
-                backgroundColor: colors.accent,
-                borderColor: colors.accent,
-              }
-            ]}
-            onPress={() => handleTypeFilterChange(filter.key)}
-          >
-            <Ionicons 
-              name={filter.icon as any} 
-              size={14} 
-              color={activeTypeFilter === filter.key ? colors.textPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterText,
-              { color: colors.textSecondary, marginLeft: 4 },
-              activeTypeFilter === filter.key && { color: colors.textPrimary, fontWeight: '600' }
-            ]}>
-              {filter.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <View style={[styles.filterRow, { gap: spacing.sm, marginTop: spacing.sm }]}>
+      <View style={[styles.tagFilterRow, { gap: spacing.sm }]}>
         {TAG_FILTERS.map((filter) => (
           <Pressable
             key={filter}
             style={[
-              styles.filterChip,
+              styles.tagChip,
               { 
                 backgroundColor: colors.card, 
                 borderColor: colors.border, 
@@ -127,7 +91,7 @@ export default function SearchScreen() {
             onPress={() => handleTagFilterChange(filter)}
           >
             <Text style={[
-              styles.filterText,
+              styles.tagText,
               { color: colors.textSecondary },
               activeTagFilter === filter && { color: colors.accent, fontWeight: '600' }
             ]}>
@@ -152,16 +116,18 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.searchWrapper, { paddingHorizontal: spacing.lg, paddingTop: spacing.md }]}>
+      <View style={[styles.searchWrapper, { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm }]}>
         <SearchBar
           value={query}
           onChangeText={setQuery}
           placeholder="Search by title, tags, domain..."
           autoFocus={false}
+          activeFilter={activeTypeFilter}
+          onFilterChange={handleTypeFilterChange}
         />
       </View>
-      
-      {renderFilterChips()}
+
+      {renderTagFilters()}
 
       <FlatList
         data={filteredBookmarks}
@@ -206,6 +172,15 @@ const styles = StyleSheet.create({
   },
   filterText: {},
   filterTextActive: {},
+  tagFilterContainer: {},
+  tagFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tagChip: {
+    borderWidth: 1,
+  },
+  tagText: {},
   list: {},
   columnWrapper: {
     gap: 8,

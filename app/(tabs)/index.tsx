@@ -9,7 +9,7 @@ import SkeletonCard from '../../components/SkeletonCard';
 import { Bookmark } from '../../lib/db';
 
 export default function LibraryScreen() {
-  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic } = useBookmarkStore();
+  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic, toggleFavorite } = useBookmarkStore();
   const { colors, spacing } = useThemeStore();
 
   useEffect(() => {
@@ -25,6 +25,11 @@ export default function LibraryScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await togglePublic(id);
   }, [togglePublic]);
+
+  const handleToggleFavorite = useCallback(async (id: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await toggleFavorite(id);
+  }, [toggleFavorite]);
 
   const handleOpenLink = useCallback(async (url: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -48,12 +53,13 @@ export default function LibraryScreen() {
         bookmark={item}
         onOpenLink={() => handleOpenLink(item.url)}
         onTogglePublic={() => handleTogglePublic(item.id)}
+        onToggleFavorite={() => handleToggleFavorite(item.id)}
         onShare={() => handleShare(item)}
         onCopyUrl={() => handleCopyUrl(item.url)}
         onDelete={() => handleDelete(item.id)}
       />
     );
-  }, [handleOpenLink, handleTogglePublic, handleShare, handleCopyUrl, handleDelete]);
+  }, [handleOpenLink, handleTogglePublic, handleToggleFavorite, handleShare, handleCopyUrl, handleDelete]);
 
   const renderSkeleton = () => (
     <View style={styles.skeletonContainer}>

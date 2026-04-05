@@ -12,6 +12,7 @@ export const darkColors = {
   danger: '#FF4444',
   border: 'rgba(255,255,255,0.08)',
   borderLight: 'rgba(255,255,255,0.12)',
+  statusBar: 'light',
 };
 
 export const lightColors = {
@@ -28,6 +29,7 @@ export const lightColors = {
   danger: '#FF4444',
   border: 'rgba(0,0,0,0.08)',
   borderLight: 'rgba(0,0,0,0.12)',
+  statusBar: 'dark',
 };
 
 export const colors = darkColors;

@@ -60,6 +60,7 @@ export default function DiscoverScreen() {
         domain: item.domain,
         tags: JSON.stringify(item.tags || []),
         is_public: 1,
+        is_favorite: 0,
         local_path: null,
         created_at: item.created_at,
         updated_at: item.created_at,

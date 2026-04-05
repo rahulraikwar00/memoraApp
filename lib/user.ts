@@ -1,13 +1,35 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
 const STORAGE_KEYS = {
-  username: 'user_username',
-  avatarUrl: 'user_avatar_url',
-  onboardingComplete: 'onboarding_complete',
+  username: "user_username",
+  avatarUrl: "user_avatar_url",
+  onboardingComplete: "onboarding_complete",
 };
 
-const ADJECTIVES = ['happy', 'lunar', 'hidden', 'cosmic', 'swift', 'bright', 'mystic', 'noble', 'wild', 'calm'];
-const ANIMALS = ['koala', 'fox', 'panda', 'wolf', 'eagle', 'dolphin', 'tiger', 'owl', 'bear', 'hawk'];
+const ADJECTIVES = [
+  "happy",
+  "lunar",
+  "hidden",
+  "cosmic",
+  "swift",
+  "bright",
+  "mystic",
+  "noble",
+  "wild",
+  "calm",
+];
+const ANIMALS = [
+  "koala",
+  "fox",
+  "panda",
+  "wolf",
+  "eagle",
+  "dolphin",
+  "tiger",
+  "owl",
+  "bear",
+  "hawk",
+];
 
 export function generateRandomUsername(): string {
   const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -24,15 +46,17 @@ export async function saveUser(username: string): Promise<void> {
   const avatarUrl = getAvatarUrl(username);
   await SecureStore.setItemAsync(STORAGE_KEYS.username, username);
   await SecureStore.setItemAsync(STORAGE_KEYS.avatarUrl, avatarUrl);
-  await SecureStore.setItemAsync(STORAGE_KEYS.onboardingComplete, 'true');
+  await SecureStore.setItemAsync(STORAGE_KEYS.onboardingComplete, "true");
 }
 
 export async function isOnboardingComplete(): Promise<boolean> {
   try {
-    const value = await SecureStore.getItemAsync(STORAGE_KEYS.onboardingComplete);
-    return value === 'true';
+    const value = await SecureStore.getItemAsync(
+      STORAGE_KEYS.onboardingComplete,
+    );
+    return value === "true";
   } catch (e) {
-    console.log('isOnboardingComplete error:', e);
+    console.log("isOnboardingComplete error:", e);
     return false;
   }
 }
