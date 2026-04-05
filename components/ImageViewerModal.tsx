@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Modal,
   View,
@@ -19,8 +19,8 @@ interface ImageViewerModalProps {
   visible: boolean;
   bookmark: Bookmark;
   onClose: () => void;
+  onTogglePublic?: () => void;
   onDelete?: () => void;
-  onShowOptions?: () => void;
 }
 
 function getRelativeTime(timestamp: number): string {
@@ -47,17 +47,24 @@ export default function ImageViewerModal({
   visible,
   bookmark,
   onClose,
+  onTogglePublic,
   onDelete,
-  onShowOptions,
 }: ImageViewerModalProps) {
   const { colors, spacing } = useThemeStore();
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
   const imageUri = bookmark.local_path || bookmark.image_url;
 
+  const handleCopy = () => {
+    if (imageUri) {
+      Clipboard.setString(imageUri);
+      Alert.alert("Copied", "Image URL copied to clipboard");
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
       "Delete Image",
-      "Are you sure you want to delete this image bookmark?",
+      "Are you sure you want to delete this image?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -80,7 +87,7 @@ export default function ImageViewerModal({
       onRequestClose={onClose}
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card + "F5", borderBottomColor: colors.border }]}>
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <Pressable onPress={onClose} style={styles.headerButton}>
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </Pressable>
@@ -90,22 +97,9 @@ export default function ImageViewerModal({
           </Text>
           
           <View style={styles.headerActions}>
-            <Pressable 
-              onPress={() => {
-                if (imageUri) {
-                  Clipboard.setString(imageUri);
-                  Alert.alert("Copied", "Image URL copied to clipboard");
-                }
-              }} 
-              style={styles.headerButton}
-            >
+            <Pressable onPress={handleCopy} style={styles.headerButton}>
               <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
             </Pressable>
-            {onShowOptions && (
-              <Pressable onPress={onShowOptions} style={styles.headerButton}>
-                <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
-              </Pressable>
-            )}
           </View>
         </View>
 
@@ -127,7 +121,7 @@ export default function ImageViewerModal({
           )}
         </View>
 
-        <View style={[styles.footer, { backgroundColor: colors.card + "F5", borderTopColor: colors.border }]}>
+        <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           {bookmark.title && (
             <Text style={[styles.imageTitle, { color: colors.textPrimary }]} numberOfLines={1}>
               {bookmark.title}
@@ -160,13 +154,30 @@ export default function ImageViewerModal({
                 {bookmark.is_public ? "Public" : "Private"}
               </Text>
             </View>
-
-            {onDelete && (
-              <Pressable onPress={handleDelete} style={styles.deleteButton}>
-                <Ionicons name="trash-outline" size={18} color={colors.danger} />
-              </Pressable>
-            )}
           </View>
+        </View>
+
+        <View style={[styles.toolbar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <Pressable style={styles.toolbarButton} onPress={handleCopy}>
+            <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Copy</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={onTogglePublic}>
+            <Ionicons 
+              name={bookmark.is_public ? "lock-closed-outline" : "globe-outline"} 
+              size={22} 
+              color={colors.textPrimary} 
+            />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+              {bookmark.is_public ? "Private" : "Public"}
+            </Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={22} color={colors.danger} />
+            <Text style={[styles.toolbarText, { color: colors.danger }]}>Delete</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -205,7 +216,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.6,
+    height: SCREEN_HEIGHT * 0.5,
   },
   noImage: {
     width: SCREEN_WIDTH * 0.8,
@@ -245,8 +256,20 @@ const styles = StyleSheet.create({
   metadataText: {
     fontSize: 12,
   },
-  deleteButton: {
-    marginLeft: "auto",
-    padding: 4,
+  toolbar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+  },
+  toolbarButton: {
+    alignItems: "center",
+    gap: 4,
+    padding: 8,
+  },
+  toolbarText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

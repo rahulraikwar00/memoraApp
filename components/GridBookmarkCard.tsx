@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, Dimensions } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, Pressable, Dimensions, Alert } from "react-native";
 import { Image } from "expo-image";
+import { Audio } from "expo-av";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -13,7 +14,6 @@ import { getContentType, getContentIcon } from "../lib/types";
 import TagChip from "./TagChip";
 import NoteReaderModal from "./NoteReaderModal";
 import ImageViewerModal from "./ImageViewerModal";
-import AudioPlayerModal from "./AudioPlayerModal";
 import BookmarkOptionsModal from "./BookmarkOptionsModal";
 
 interface GridBookmarkCardProps {
@@ -35,6 +35,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 8;
 const NUM_COLUMNS = 2;
 
+const CARD_HEIGHTS = {
+  voice: 80,
+  note: 120,
+  image: 200,
+  link: 140,
+};
+
 export default function GridBookmarkCard({
   bookmark,
   onPress,
@@ -53,10 +60,22 @@ export default function GridBookmarkCard({
     NUM_COLUMNS;
   const scale = useSharedValue(1);
 
+  const contentType = getContentType(bookmark);
+  const CARD_HEIGHT = CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
+
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
-  const [showAudioModal, setShowAudioModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -70,10 +89,48 @@ export default function GridBookmarkCard({
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
+  const handleVoicePlay = async () => {
+    if (!bookmark.local_path) {
+      Alert.alert("Error", "Audio file not found");
+      return;
+    }
+
+    try {
+      if (isPlaying && soundRef.current) {
+        await soundRef.current.pauseAsync();
+        setIsPlaying(false);
+        return;
+      }
+
+      if (soundRef.current && !isPlaying) {
+        await soundRef.current.playAsync();
+        setIsPlaying(true);
+        return;
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: bookmark.local_path },
+        { shouldPlay: true },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsPlaying(false);
+            soundRef.current?.setPositionAsync(0);
+          }
+        }
+      );
+
+      soundRef.current = sound;
+      setIsPlaying(true);
+    } catch (err) {
+      console.error("Playback error:", err);
+      Alert.alert("Error", "Failed to play audio");
+    }
+  };
+
   const handleCardPress = () => {
     switch (contentType) {
       case "voice":
-        setShowAudioModal(true);
+        handleVoicePlay();
         break;
       case "note":
         setShowNoteModal(true);
@@ -92,7 +149,11 @@ export default function GridBookmarkCard({
     }
   };
 
-  const contentType = getContentType(bookmark);
+  const handleOptionsPress = (e: any) => {
+    e.stopPropagation();
+    setShowOptionsModal(true);
+  };
+
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
   const domain = contentType === 'link' 
     ? (bookmark.domain || (bookmark.url ? new URL(bookmark.url).hostname : ''))
@@ -121,19 +182,40 @@ export default function GridBookmarkCard({
       );
     }
 
-    if (contentType === 'voice' || contentType === 'note') {
+    if (contentType === 'voice') {
       return (
-        <View style={[styles.typePreview, { backgroundColor: colors.elevated }]}>
-          <Ionicons 
-            name={getContentIcon(contentType)} 
-            size={32} 
-            color={colors.textTertiary} 
-          />
-          {contentType === 'voice' && bookmark.title && (
-            <Text style={[styles.typePreviewText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {bookmark.title}
+        <View style={[styles.voicePreview, { backgroundColor: colors.elevated }]}>
+          <Pressable
+            style={[styles.playButton, { backgroundColor: colors.accent }]}
+            onPress={handleVoicePlay}
+          >
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={20}
+              color="#fff"
+            />
+          </Pressable>
+          <View style={styles.voiceInfo}>
+            <Text style={[styles.voiceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+              {bookmark.title?.replace(/\s*\(\d+:\d+\)/, "") || "Voice Note"}
             </Text>
-          )}
+            <Text style={[styles.voiceStatus, { color: colors.textTertiary }]}>
+              {isPlaying ? "Playing..." : "Tap to play"}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (contentType === 'note') {
+      const noteText = bookmark.description || bookmark.title || "";
+      const preview = noteText.length > 80 ? noteText.substring(0, 80) + "..." : noteText;
+      return (
+        <View style={[styles.notePreview, { backgroundColor: colors.elevated }]}>
+          <Ionicons name="document-text" size={24} color={colors.accent} />
+          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={3}>
+            {preview}
+          </Text>
         </View>
       );
     }
@@ -162,6 +244,7 @@ export default function GridBookmarkCard({
             backgroundColor: colors.card,
             borderColor: colors.border,
             width: CARD_WIDTH,
+            minHeight: CARD_HEIGHT,
           },
         ]}
         onPress={handleCardPress}
@@ -193,15 +276,9 @@ export default function GridBookmarkCard({
             >
               {contentType === 'link' ? domain : getContentIcon(contentType)}
             </Text>
-            {onVote && (
-              <Pressable onPress={handleVotePress} style={styles.voteButton}>
-                <Ionicons
-                  name={isVoted ? "heart" : "heart-outline"}
-                  size={16}
-                  color={isVoted ? colors.danger : colors.textTertiary}
-                />
-              </Pressable>
-            )}
+            <Pressable onPress={handleOptionsPress} style={styles.optionsButton}>
+              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textTertiary} />
+            </Pressable>
           </View>
 
           <Text
@@ -211,7 +288,7 @@ export default function GridBookmarkCard({
             {bookmark.title || bookmark.url || 'Untitled'}
           </Text>
 
-          {tags.length > 0 && (
+          {tags.length > 0 && contentType !== 'voice' && (
             <View style={[styles.tags, { gap: spacing.xs }]}>
               {tags.slice(0, 2).map((tag, index) => (
                 <TagChip key={index} tag={tag} small />
@@ -227,23 +304,16 @@ export default function GridBookmarkCard({
         onClose={() => setShowNoteModal(false)}
         onEdit={onEdit}
         onShare={onShare}
-        onShowOptions={() => setShowOptionsModal(true)}
+        onTogglePublic={onTogglePublic}
+        onDelete={onDelete}
       />
 
       <ImageViewerModal
         visible={showImageModal}
         bookmark={bookmark}
         onClose={() => setShowImageModal(false)}
+        onTogglePublic={onTogglePublic}
         onDelete={onDelete}
-        onShowOptions={() => setShowOptionsModal(true)}
-      />
-
-      <AudioPlayerModal
-        visible={showAudioModal}
-        bookmark={bookmark}
-        onClose={() => setShowAudioModal(false)}
-        onDelete={onDelete}
-        onShowOptions={() => setShowOptionsModal(true)}
       />
 
       <BookmarkOptionsModal
@@ -269,19 +339,39 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 120,
+    height: 140,
   },
-  typePreview: {
-    width: "100%",
-    height: 120,
+  voicePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 10,
+  },
+  playButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+  voiceInfo: {
+    flex: 1,
+  },
+  voiceTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  voiceStatus: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  notePreview: {
+    padding: 12,
     gap: 8,
   },
-  typePreviewText: {
+  noteText: {
     fontSize: 12,
-    textAlign: "center",
-    paddingHorizontal: 8,
+    lineHeight: 16,
   },
   content: {},
   header: {
@@ -306,6 +396,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "400",
     flex: 1,
+  },
+  optionsButton: {
+    padding: 2,
   },
   title: {
     fontSize: 14,

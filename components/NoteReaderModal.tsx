@@ -9,7 +9,6 @@ import {
   Alert,
   Clipboard,
 } from "react-native";
-import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
 import { Bookmark } from "../lib/db";
@@ -21,7 +20,8 @@ interface NoteReaderModalProps {
   onClose: () => void;
   onEdit?: () => void;
   onShare?: () => void;
-  onShowOptions?: () => void;
+  onTogglePublic?: () => void;
+  onDelete?: () => void;
 }
 
 function getRelativeTime(timestamp: number): string {
@@ -48,7 +48,8 @@ export default function NoteReaderModal({
   onClose,
   onEdit,
   onShare,
-  onShowOptions,
+  onTogglePublic,
+  onDelete,
 }: NoteReaderModalProps) {
   const { colors, spacing } = useThemeStore();
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
@@ -57,6 +58,28 @@ export default function NoteReaderModal({
   const handleCopy = () => {
     Clipboard.setString(noteText);
     Alert.alert("Copied", "Note copied to clipboard");
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Note",
+      "Are you sure you want to delete this note?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            onDelete?.();
+            onClose();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleTogglePublic = () => {
+    onTogglePublic?.();
   };
 
   return (
@@ -85,16 +108,6 @@ export default function NoteReaderModal({
             <Pressable onPress={handleCopy} style={styles.headerButton}>
               <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
             </Pressable>
-            {onEdit && (
-              <Pressable onPress={onEdit} style={styles.headerButton}>
-                <Ionicons name="create-outline" size={22} color={colors.textPrimary} />
-              </Pressable>
-            )}
-            {onShowOptions && (
-              <Pressable onPress={onShowOptions} style={styles.headerButton}>
-                <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
-              </Pressable>
-            )}
           </View>
         </View>
 
@@ -140,6 +153,39 @@ export default function NoteReaderModal({
             </View>
           </View>
         </ScrollView>
+
+        <View style={[styles.toolbar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <Pressable style={styles.toolbarButton} onPress={onEdit}>
+            <Ionicons name="create-outline" size={22} color={colors.textPrimary} />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Edit</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={onShare}>
+            <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Share</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={handleCopy}>
+            <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Copy</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={handleTogglePublic}>
+            <Ionicons 
+              name={bookmark.is_public ? "lock-closed-outline" : "globe-outline"} 
+              size={22} 
+              color={colors.textPrimary} 
+            />
+            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+              {bookmark.is_public ? "Private" : "Public"}
+            </Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolbarButton} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={22} color={colors.danger} />
+            <Text style={[styles.toolbarText, { color: colors.danger }]}>Delete</Text>
+          </Pressable>
+        </View>
       </View>
     </Modal>
   );
@@ -205,5 +251,21 @@ const styles = StyleSheet.create({
   },
   metadataText: {
     fontSize: 13,
+  },
+  toolbar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+  },
+  toolbarButton: {
+    alignItems: "center",
+    gap: 4,
+    padding: 8,
+  },
+  toolbarText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
 });
