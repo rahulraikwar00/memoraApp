@@ -1,11 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
-import { Image } from 'expo-image';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../stores/useThemeStore';
-import { Bookmark } from '../lib/db';
-import TagChip from './TagChip';
+import React from "react";
+import { View, Text, StyleSheet, Pressable, Dimensions } from "react-native";
+import { Image } from "expo-image";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
+import { useThemeStore } from "../stores/useThemeStore";
+import { Bookmark } from "../lib/db";
+import TagChip from "./TagChip";
 
 interface GridBookmarkCardProps {
   bookmark: Bookmark;
@@ -16,13 +20,20 @@ interface GridBookmarkCardProps {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 8;
 const NUM_COLUMNS = 2;
 
-export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }: GridBookmarkCardProps) {
+export default function GridBookmarkCard({
+  bookmark,
+  onPress,
+  onVote,
+  isVoted,
+}: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
-  const CARD_WIDTH = (SCREEN_WIDTH - (spacing.lg * 2) - (CARD_GAP * (NUM_COLUMNS - 1))) / NUM_COLUMNS;
+  const CARD_WIDTH =
+    (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) /
+    NUM_COLUMNS;
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -37,10 +48,20 @@ export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }:
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
-  const tags = JSON.parse(bookmark.tags || '[]') as string[];
-  const domain = bookmark.domain || (() => { try { return new URL(bookmark.url).hostname; } catch { return ''; } })();
+  const tags = JSON.parse(bookmark.tags || "[]") as string[];
+  const domain =
+    bookmark.domain ||
+    (() => {
+      try {
+        return new URL(bookmark.url).hostname;
+      } catch {
+        return "";
+      }
+    })();
 
-  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null;
+  const faviconUrl = domain
+    ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    : null;
 
   const handleVotePress = (e: any) => {
     e.stopPropagation();
@@ -50,9 +71,13 @@ export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }:
   return (
     <AnimatedPressable
       style={[
-        styles.container, 
-        animatedStyle, 
-        { backgroundColor: colors.card, borderColor: colors.border, width: CARD_WIDTH }
+        styles.container,
+        animatedStyle,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          width: CARD_WIDTH,
+        },
       ]}
       onPress={onPress}
       onPressIn={handlePressIn}
@@ -76,21 +101,27 @@ export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }:
               contentFit="contain"
             />
           ) : null}
-          <Text style={[styles.domain, { color: colors.textTertiary }]} numberOfLines={1}>
+          <Text
+            style={[styles.domain, { color: colors.textTertiary }]}
+            numberOfLines={1}
+          >
             {domain}
           </Text>
           {onVote && (
             <Pressable onPress={handleVotePress} style={styles.voteButton}>
-              <Ionicons 
-                name={isVoted ? 'heart' : 'heart-outline'} 
-                size={16} 
-                color={isVoted ? colors.danger : colors.textTertiary} 
+              <Ionicons
+                name={isVoted ? "heart" : "heart-outline"}
+                size={16}
+                color={isVoted ? colors.danger : colors.textTertiary}
               />
             </Pressable>
           )}
         </View>
 
-        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+        <Text
+          style={[styles.title, { color: colors.textPrimary }]}
+          numberOfLines={2}
+        >
           {bookmark.title || bookmark.url}
         </Text>
 
@@ -109,18 +140,18 @@ export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }:
 const styles = StyleSheet.create({
   container: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: CARD_GAP,
     borderWidth: 1,
   },
   image: {
-    width: '100%',
+    width: "100%",
     height: 120,
   },
   content: {},
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     marginBottom: 4,
   },
@@ -131,18 +162,18 @@ const styles = StyleSheet.create({
   },
   domain: {
     fontSize: 11,
-    fontWeight: '400',
+    fontWeight: "400",
     flex: 1,
   },
   title: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     lineHeight: 18,
     marginBottom: 6,
   },
   tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   voteButton: {
     padding: 2,

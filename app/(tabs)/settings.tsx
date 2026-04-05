@@ -2,22 +2,43 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import { router } from 'expo-router';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { clearAllData, getBookmarksCount } from '../../lib/db';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { getUsername, updateUsername, getUserAvatar, isOnboardingComplete } from '../../lib/user';
+import * as SecureStore from 'expo-secure-store';
+import LogoutModal from '../../components/LogoutModal';
+
+const STORAGE_KEYS = {
+  username: 'user_username',
+  avatarUrl: 'user_avatar_url',
+  onboardingComplete: 'onboarding_complete',
+};
 
 export default function SettingsScreen() {
   const [bookmarkCount, setBookmarkCount] = useState(0);
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const { isDark, toggleTheme, colors, spacing, typography, borderRadius } = useThemeStore();
   const { isAuthenticated, logout } = useAuthStore();
 
   useEffect(() => {
     loadStats();
+    loadUser();
   }, []);
 
   const loadStats = async () => {
     const count = await getBookmarksCount();
     setBookmarkCount(count);
+  };
+
+  const loadUser = async () => {
+    const username = await getUsername();
+    const avatar = await getUserAvatar();
+    setCurrentUsername(username);
+    setCurrentAvatar(avatar);
   };
 
   const handleClearData = () => {
@@ -44,14 +65,7 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout },
-      ]
-    );
+    setLogoutModalVisible(true);
   };
 
   const handleOpenLink = async (url: string) => {
@@ -135,20 +149,18 @@ export default function SettingsScreen() {
       <View style={[styles.section, { marginTop: spacing.xxl }]}>
         <Text style={[styles.sectionTitle, { color: colors.textTertiary, paddingHorizontal: spacing.lg, marginBottom: spacing.sm, ...typography.caption }]}>Account</Text>
         <View style={[styles.card, { backgroundColor: colors.card, borderRadius: borderRadius.md, marginHorizontal: spacing.lg, borderColor: colors.border }]}>
-          {isAuthenticated ? (
-            renderSettingItem(
-              'log-out-outline',
-              'Logout',
-              'Sign out of your account',
-              handleLogout
-            )
-          ) : (
-            renderSettingItem(
-              'log-in-outline',
-              'Login',
-              'Sign in to sync your bookmarks',
-              () => Alert.alert('Login', 'Login functionality coming soon')
-            )
+          {renderSettingItem(
+            'person-circle-outline',
+            'Username',
+            currentUsername || 'Not set',
+            undefined,
+            <Text style={[styles.usernameText, { color: colors.accent }]}>{currentUsername}</Text>
+          )}
+          {renderSettingItem(
+            'log-out-outline',
+            'Logout',
+            'Sign out and switch account',
+            handleLogout
           )}
         </View>
       </View>
@@ -182,6 +194,8 @@ export default function SettingsScreen() {
         <Text style={[styles.footerText, { color: colors.textTertiary, ...typography.title }]}>Memora</Text>
         <Text style={[styles.footerSubtext, { color: colors.textTertiary, marginTop: spacing.xs, ...typography.caption }]}>Your offline-first bookmark manager</Text>
       </View>
+
+      <LogoutModal visible={logoutModalVisible} onClose={() => setLogoutModalVisible(false)} />
     </ScrollView>
   );
 }
@@ -228,6 +242,10 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  usernameText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   versionText: {
     fontSize: 15,

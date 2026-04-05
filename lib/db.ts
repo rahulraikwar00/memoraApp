@@ -9,6 +9,7 @@ export interface Bookmark {
   domain: string | null;
   tags: string;
   is_public: number;
+  local_path: string | null;
   created_at: number;
   updated_at: number;
   synced_at: number | null;
@@ -105,6 +106,14 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
       // Column already exists
     }
 
+    try {
+      await database.execAsync(
+        `ALTER TABLE bookmarks ADD COLUMN local_path TEXT`,
+      );
+    } catch {
+      // Column already exists
+    }
+
     for (const idx of createIndexes) {
       try {
         await database.execAsync(idx);
@@ -172,8 +181,8 @@ export async function createBookmark(
   const now = Date.now();
 
   await database.runAsync(
-    `INSERT INTO bookmarks (id, url, title, description, image_url, domain, tags, is_public, created_at, updated_at, synced_at, is_deleted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO bookmarks (id, url, title, description, image_url, domain, tags, is_public, local_path, created_at, updated_at, synced_at, is_deleted)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.url,
@@ -183,6 +192,7 @@ export async function createBookmark(
       data.domain,
       data.tags,
       data.is_public,
+      data.local_path || null,
       now,
       now,
       null,
@@ -195,6 +205,7 @@ export async function createBookmark(
   return {
     id,
     ...data,
+    local_path: data.local_path || null,
     created_at: now,
     updated_at: now,
     synced_at: null,
@@ -239,6 +250,10 @@ export async function updateBookmark(
   if (data.is_public !== undefined) {
     fields.push("is_public = ?");
     values.push(data.is_public);
+  }
+  if (data.local_path !== undefined) {
+    fields.push("local_path = ?");
+    values.push(data.local_path);
   }
   if (data.synced_at !== undefined) {
     fields.push("synced_at = ?");
