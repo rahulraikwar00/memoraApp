@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { View, FlatList, StyleSheet, ScrollView, Pressable, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import SearchBar from '../../components/SearchBar';
@@ -7,13 +8,31 @@ import GridBookmarkCard from '../../components/GridBookmarkCard';
 import EmptyState from '../../components/EmptyState';
 import { Bookmark } from '../../lib/db';
 
-const FILTER_TABS = ['All', 'Dev', 'Design', 'Video', 'Article', 'Research'];
+type ContentType = 'link' | 'image' | 'note' | 'voice';
+
+const getContentType = (bookmark: Bookmark): ContentType => {
+  if (bookmark.domain === 'local-image') return 'image';
+  if (bookmark.domain === 'local-note') return 'note';
+  if (bookmark.domain === 'local-voice') return 'voice';
+  return 'link';
+};
+
+const TYPE_FILTERS = [
+  { key: 'all', label: 'All', icon: 'apps' },
+  { key: 'link', label: 'Links', icon: 'link' },
+  { key: 'image', label: 'Images', icon: 'image' },
+  { key: 'note', label: 'Notes', icon: 'document-text' },
+  { key: 'voice', label: 'Voice', icon: 'mic' },
+];
+
+const TAG_FILTERS = ['Dev', 'Design', 'Video', 'Article', 'Research'];
 
 export default function SearchScreen() {
   const { bookmarks, performSearch } = useBookmarkStore();
   const { colors, spacing, typography, borderRadius } = useThemeStore();
   const [query, setQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeTypeFilter, setActiveTypeFilter] = useState('all');
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
@@ -22,55 +41,73 @@ export default function SearchScreen() {
     return () => clearTimeout(debounceTimer);
   }, [query, performSearch]);
 
-  const handleFilterChange = useCallback((filter: string) => {
-    setActiveFilter(filter);
+  const handleTypeFilterChange = useCallback((filter: string) => {
+    setActiveTypeFilter(filter);
+  }, []);
+
+  const handleTagFilterChange = useCallback((filter: string | null) => {
+    setActiveTagFilter(prev => prev === filter ? null : filter);
   }, []);
 
   const filteredBookmarks = useMemo(() => {
-    if (activeFilter === 'All') return bookmarks;
     return bookmarks.filter(bookmark => {
-      const tags = JSON.parse(bookmark.tags || '[]') as string[];
-      const filterLower = activeFilter.toLowerCase();
-      return tags.some(tag => tag.toLowerCase().includes(filterLower));
+      if (activeTypeFilter !== 'all') {
+        const type = getContentType(bookmark);
+        if (type !== activeTypeFilter) return false;
+      }
+      
+      if (activeTagFilter) {
+        const tags = JSON.parse(bookmark.tags || '[]') as string[];
+        if (!tags.some(tag => tag.toLowerCase().includes(activeTagFilter.toLowerCase()))) {
+          return false;
+        }
+      }
+      
+      return true;
     });
-  }, [bookmarks, activeFilter]);
+  }, [bookmarks, activeTypeFilter, activeTagFilter]);
 
   const renderFilterChips = () => (
     <View 
       style={[styles.filterContainer, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md }]}
     >
       <View style={[styles.filterRow, { gap: spacing.sm }]}>
-        {FILTER_TABS.slice(0, 3).map((filter) => (
+        {TYPE_FILTERS.map((filter) => (
           <Pressable
-            key={filter}
+            key={filter.key}
             style={[
               styles.filterChip,
               { 
                 backgroundColor: colors.card, 
                 borderColor: colors.border, 
                 borderRadius: borderRadius.pill,
-                paddingHorizontal: spacing.lg,
+                paddingHorizontal: spacing.md,
                 paddingVertical: spacing.sm,
               },
-              activeFilter === filter && {
+              activeTypeFilter === filter.key && {
                 backgroundColor: colors.accent,
                 borderColor: colors.accent,
               }
             ]}
-            onPress={() => handleFilterChange(filter)}
+            onPress={() => handleTypeFilterChange(filter.key)}
           >
+            <Ionicons 
+              name={filter.icon as any} 
+              size={14} 
+              color={activeTypeFilter === filter.key ? colors.textPrimary : colors.textSecondary} 
+            />
             <Text style={[
               styles.filterText,
-              { color: colors.textSecondary },
-              activeFilter === filter && { color: colors.textPrimary, fontWeight: '600' }
+              { color: colors.textSecondary, marginLeft: 4 },
+              activeTypeFilter === filter.key && { color: colors.textPrimary, fontWeight: '600' }
             ]}>
-              {filter}
+              {filter.label}
             </Text>
           </Pressable>
         ))}
       </View>
       <View style={[styles.filterRow, { gap: spacing.sm, marginTop: spacing.sm }]}>
-        {FILTER_TABS.slice(3).map((filter) => (
+        {TAG_FILTERS.map((filter) => (
           <Pressable
             key={filter}
             style={[
@@ -82,17 +119,17 @@ export default function SearchScreen() {
                 paddingHorizontal: spacing.lg,
                 paddingVertical: spacing.sm,
               },
-              activeFilter === filter && {
-                backgroundColor: colors.accent,
+              activeTagFilter === filter && {
+                backgroundColor: colors.accentLight + '30',
                 borderColor: colors.accent,
               }
             ]}
-            onPress={() => handleFilterChange(filter)}
+            onPress={() => handleTagFilterChange(filter)}
           >
             <Text style={[
               styles.filterText,
               { color: colors.textSecondary },
-              activeFilter === filter && { color: colors.textPrimary, fontWeight: '600' }
+              activeTagFilter === filter && { color: colors.accent, fontWeight: '600' }
             ]}>
               {filter}
             </Text>

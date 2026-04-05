@@ -16,7 +16,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { Audio } from 'expo-av';
+import { AudioModule, RecordingPresets, setAudioModeAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,7 +55,7 @@ export default function SaveScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordedAudioUri, setRecordedAudioUri] = useState<string | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recorderRef = useRef<InstanceType<typeof AudioModule.AudioRecorder> | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scale = useSharedValue(1);
@@ -190,17 +190,24 @@ export default function SaveScreen() {
 
   const startRecording = async () => {
     try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permission Required', 'Please allow microphone access');
+        return;
+      }
+
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const recorderClass = (AudioModule as any).AudioRecorder;
+      const recorder = new recorderClass(RecordingPresets.HIGH_QUALITY);
+      recorderRef.current = recorder;
       
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -216,7 +223,8 @@ export default function SaveScreen() {
   };
 
   const stopRecording = async () => {
-    if (!recordingRef.current) return;
+    const recorder = recorderRef.current;
+    if (!recorder) return;
 
     try {
       setIsRecording(false);
@@ -226,9 +234,9 @@ export default function SaveScreen() {
         recordingTimerRef.current = null;
       }
 
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      await recorder.stop();
+      const uri = recorder.uri;
+      recorderRef.current = null;
 
       if (uri) {
         const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.m4a`;
@@ -246,8 +254,8 @@ export default function SaveScreen() {
         setTags(suggestedTags);
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
       });
 
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
