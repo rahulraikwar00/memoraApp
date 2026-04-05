@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking, Clipboard } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
@@ -18,14 +18,7 @@ export default function LibraryScreen() {
 
   const handleDelete = useCallback(async (id: string) => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      'Delete Bookmark',
-      'Are you sure you want to delete this bookmark?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removeBookmark(id) },
-      ]
-    );
+    await removeBookmark(id);
   }, [removeBookmark]);
 
   const handleTogglePublic = useCallback(async (id: string) => {
@@ -33,25 +26,34 @@ export default function LibraryScreen() {
     await togglePublic(id);
   }, [togglePublic]);
 
+  const handleOpenLink = useCallback(async (url: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL(url);
+  }, []);
+
+  const handleShare = useCallback(async (bookmark: Bookmark) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Clipboard.setString(bookmark.url);
+    Alert.alert('Copied', 'Link copied to clipboard');
+  }, []);
+
+  const handleCopyUrl = useCallback((url: string) => {
+    Clipboard.setString(url);
+    Alert.alert('Copied', 'URL copied to clipboard');
+  }, []);
+
   const renderItem = useCallback(({ item }: { item: Bookmark }) => {
     return (
       <GridBookmarkCard
         bookmark={item}
-        onPress={() => {
-          Alert.alert(
-            item.title || item.url,
-            'What would you like to do?',
-            [
-              { text: 'Open Link', onPress: () => Linking.openURL(item.url) },
-              { text: 'Toggle Public', onPress: () => handleTogglePublic(item.id) },
-              { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item.id) },
-              { text: 'Cancel', style: 'cancel' },
-            ]
-          );
-        }}
+        onOpenLink={() => handleOpenLink(item.url)}
+        onTogglePublic={() => handleTogglePublic(item.id)}
+        onShare={() => handleShare(item)}
+        onCopyUrl={() => handleCopyUrl(item.url)}
+        onDelete={() => handleDelete(item.id)}
       />
     );
-  }, [handleDelete, handleTogglePublic]);
+  }, [handleOpenLink, handleTogglePublic, handleShare, handleCopyUrl, handleDelete]);
 
   const renderSkeleton = () => (
     <View style={styles.skeletonContainer}>

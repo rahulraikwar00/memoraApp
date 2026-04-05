@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import Animated, {
@@ -9,29 +9,22 @@ import Animated, {
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
 import { Bookmark } from "../lib/db";
+import { getContentType, getContentIcon } from "../lib/types";
 import TagChip from "./TagChip";
-
-type ContentType = 'link' | 'image' | 'note' | 'voice';
-
-const getContentType = (bookmark: Bookmark): ContentType => {
-  if (bookmark.domain === 'local-image') return 'image';
-  if (bookmark.domain === 'local-note') return 'note';
-  if (bookmark.domain === 'local-voice') return 'voice';
-  return 'link';
-};
-
-const getContentIcon = (type: ContentType): keyof typeof Ionicons.glyphMap => {
-  switch (type) {
-    case 'image': return 'image';
-    case 'note': return 'document-text';
-    case 'voice': return 'mic';
-    default: return 'globe-outline';
-  }
-};
+import NoteReaderModal from "./NoteReaderModal";
+import ImageViewerModal from "./ImageViewerModal";
+import AudioPlayerModal from "./AudioPlayerModal";
+import BookmarkOptionsModal from "./BookmarkOptionsModal";
 
 interface GridBookmarkCardProps {
   bookmark: Bookmark;
   onPress?: () => void;
+  onOpenLink?: () => void;
+  onTogglePublic?: () => void;
+  onEdit?: () => void;
+  onShare?: () => void;
+  onCopyUrl?: () => void;
+  onDelete?: () => void;
   onVote?: () => void;
   isVoted?: boolean;
 }
@@ -45,6 +38,12 @@ const NUM_COLUMNS = 2;
 export default function GridBookmarkCard({
   bookmark,
   onPress,
+  onOpenLink,
+  onTogglePublic,
+  onEdit,
+  onShare,
+  onCopyUrl,
+  onDelete,
   onVote,
   isVoted,
 }: GridBookmarkCardProps) {
@@ -53,6 +52,11 @@ export default function GridBookmarkCard({
     (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) /
     NUM_COLUMNS;
   const scale = useSharedValue(1);
+
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -64,6 +68,28 @@ export default function GridBookmarkCard({
 
   const handlePressOut = () => {
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
+
+  const handleCardPress = () => {
+    switch (contentType) {
+      case "voice":
+        setShowAudioModal(true);
+        break;
+      case "note":
+        setShowNoteModal(true);
+        break;
+      case "image":
+        setShowImageModal(true);
+        break;
+      case "link":
+      default:
+        if (onPress) {
+          onPress();
+        } else {
+          setShowOptionsModal(true);
+        }
+        break;
+    }
   };
 
   const contentType = getContentType(bookmark);
@@ -127,72 +153,110 @@ export default function GridBookmarkCard({
   };
 
   return (
-    <AnimatedPressable
-      style={[
-        styles.container,
-        animatedStyle,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          width: CARD_WIDTH,
-        },
-      ]}
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      accessibilityLabel={`Bookmark: ${bookmark.title || bookmark.url}`}
-    >
-      {renderPreview()}
-      <View style={[styles.content, { padding: spacing.sm }]}>
-        <View style={styles.header}>
-          {contentType === 'link' && faviconUrl ? (
-            <Image
-              source={{ uri: faviconUrl }}
-              style={styles.favicon}
-              contentFit="contain"
-            />
-          ) : (
-            <View style={[styles.typeIcon, { backgroundColor: colors.accent + '20' }]}>
-              <Ionicons 
-                name={getContentIcon(contentType)} 
-                size={10} 
-                color={colors.accent} 
+    <>
+      <AnimatedPressable
+        style={[
+          styles.container,
+          animatedStyle,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            width: CARD_WIDTH,
+          },
+        ]}
+        onPress={handleCardPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        accessibilityLabel={`Bookmark: ${bookmark.title || bookmark.url}`}
+      >
+        {renderPreview()}
+        <View style={[styles.content, { padding: spacing.sm }]}>
+          <View style={styles.header}>
+            {contentType === 'link' && faviconUrl ? (
+              <Image
+                source={{ uri: faviconUrl }}
+                style={styles.favicon}
+                contentFit="contain"
               />
+            ) : (
+              <View style={[styles.typeIcon, { backgroundColor: colors.accent + '20' }]}>
+                <Ionicons 
+                  name={getContentIcon(contentType)} 
+                  size={10} 
+                  color={colors.accent} 
+                />
+              </View>
+            )}
+            <Text
+              style={[styles.domain, { color: colors.textTertiary }]}
+              numberOfLines={1}
+            >
+              {contentType === 'link' ? domain : getContentIcon(contentType)}
+            </Text>
+            {onVote && (
+              <Pressable onPress={handleVotePress} style={styles.voteButton}>
+                <Ionicons
+                  name={isVoted ? "heart" : "heart-outline"}
+                  size={16}
+                  color={isVoted ? colors.danger : colors.textTertiary}
+                />
+              </Pressable>
+            )}
+          </View>
+
+          <Text
+            style={[styles.title, { color: colors.textPrimary }]}
+            numberOfLines={2}
+          >
+            {bookmark.title || bookmark.url || 'Untitled'}
+          </Text>
+
+          {tags.length > 0 && (
+            <View style={[styles.tags, { gap: spacing.xs }]}>
+              {tags.slice(0, 2).map((tag, index) => (
+                <TagChip key={index} tag={tag} small />
+              ))}
             </View>
           )}
-          <Text
-            style={[styles.domain, { color: colors.textTertiary }]}
-            numberOfLines={1}
-          >
-            {contentType === 'link' ? domain : getContentIcon(contentType)}
-          </Text>
-          {onVote && (
-            <Pressable onPress={handleVotePress} style={styles.voteButton}>
-              <Ionicons
-                name={isVoted ? "heart" : "heart-outline"}
-                size={16}
-                color={isVoted ? colors.danger : colors.textTertiary}
-              />
-            </Pressable>
-          )}
         </View>
+      </AnimatedPressable>
 
-        <Text
-          style={[styles.title, { color: colors.textPrimary }]}
-          numberOfLines={2}
-        >
-          {bookmark.title || bookmark.url || 'Untitled'}
-        </Text>
+      <NoteReaderModal
+        visible={showNoteModal}
+        bookmark={bookmark}
+        onClose={() => setShowNoteModal(false)}
+        onEdit={onEdit}
+        onShare={onShare}
+        onShowOptions={() => setShowOptionsModal(true)}
+      />
 
-        {tags.length > 0 && (
-          <View style={[styles.tags, { gap: spacing.xs }]}>
-            {tags.slice(0, 2).map((tag, index) => (
-              <TagChip key={index} tag={tag} small />
-            ))}
-          </View>
-        )}
-      </View>
-    </AnimatedPressable>
+      <ImageViewerModal
+        visible={showImageModal}
+        bookmark={bookmark}
+        onClose={() => setShowImageModal(false)}
+        onDelete={onDelete}
+        onShowOptions={() => setShowOptionsModal(true)}
+      />
+
+      <AudioPlayerModal
+        visible={showAudioModal}
+        bookmark={bookmark}
+        onClose={() => setShowAudioModal(false)}
+        onDelete={onDelete}
+        onShowOptions={() => setShowOptionsModal(true)}
+      />
+
+      <BookmarkOptionsModal
+        visible={showOptionsModal}
+        bookmark={bookmark}
+        onClose={() => setShowOptionsModal(false)}
+        onOpenLink={onOpenLink}
+        onTogglePublic={onTogglePublic}
+        onEdit={onEdit}
+        onShare={onShare}
+        onDelete={onDelete}
+      />
+    </>
   );
 }
 
