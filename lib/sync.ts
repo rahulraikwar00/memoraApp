@@ -11,7 +11,7 @@ import {
 
 const MAX_RETRIES = 5;
 const BASE_DELAY = 1000;
-const BATCH_SIZE = 1;
+const BATCH_SIZE = 5;
 
 let isSyncing = false;
 let syncInterval: ReturnType<typeof setInterval> | null = null;
@@ -54,11 +54,18 @@ export function stopSyncWorker(): void {
 
 export async function syncNow(): Promise<void> {
   const { isAuthenticated, token } = useAuthStore.getState();
-  console.log("[SYNC_CLIENT] isAuthenticated:", isAuthenticated, "token:", token ? "present" : "null");
-  
+  console.log(
+    "[SYNC_CLIENT] isAuthenticated:",
+    isAuthenticated,
+    "token:",
+    token ? "present" : "null",
+  );
+
   // For development/demo: allow sync without auth (remove this check in production)
   if (!isAuthenticated) {
-    console.log("[SYNC_CLIENT] Warning: Not authenticated, but proceeding for demo...");
+    console.log(
+      "[SYNC_CLIENT] Warning: Not authenticated, but proceeding for demo...",
+    );
     // return; // Disabled for demo - enable in production
   }
 
@@ -89,7 +96,11 @@ export async function syncNow(): Promise<void> {
         created_at: item.created_at,
       })),
     };
-    console.log("[SYNC_CLIENT] Sending payload with", payload.bookmarks?.length || 0, "bookmarks");
+    console.log(
+      "[SYNC_CLIENT] Sending payload with",
+      payload.bookmarks?.length || 0,
+      "bookmarks",
+    );
 
     try {
       const result = await syncApi.sync(payload);

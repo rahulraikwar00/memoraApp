@@ -3,7 +3,7 @@ import { View, FlatList, StyleSheet, ScrollView, Pressable, Text } from 'react-n
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import SearchBar from '../../components/SearchBar';
-import BookmarkCard from '../../components/BookmarkCard';
+import GridBookmarkCard from '../../components/GridBookmarkCard';
 import EmptyState from '../../components/EmptyState';
 import { Bookmark } from '../../lib/db';
 
@@ -103,7 +103,7 @@ export default function SearchScreen() {
   );
 
   const renderItem = useCallback(({ item }: { item: Bookmark }) => (
-    <BookmarkCard bookmark={item} />
+    <GridBookmarkCard bookmark={item} />
   ), []);
 
   const renderHeader = () => (
@@ -130,6 +130,8 @@ export default function SearchScreen() {
         data={filteredBookmarks}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={[
           styles.list,
           { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
@@ -168,6 +170,9 @@ const styles = StyleSheet.create({
   filterText: {},
   filterTextActive: {},
   list: {},
+  columnWrapper: {
+    gap: 8,
+  },
   emptyList: {
     flexGrow: 1,
   },
