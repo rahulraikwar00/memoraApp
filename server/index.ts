@@ -12,6 +12,16 @@ app.use(express.json());
 
 const db = new Database("database.db");
 
+// Users table for username management
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    avatar_url TEXT,
+    created_at INTEGER NOT NULL
+  )
+`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS bookmarks (
     id TEXT PRIMARY KEY,
@@ -43,6 +53,53 @@ interface Vote {
   item_id: string;
   count: number;
 }
+
+// Username validation and registration
+app.get("/api/auth/check-username", (req: Request, res: Response) => {
+  const { username } = req.query;
+  
+  if (!username || typeof username !== "string") {
+    return res.status(400).json({ error: "username required" });
+  }
+  
+  const normalizedUsername = username.toLowerCase().trim();
+  const existing = db
+    .prepare("SELECT id FROM users WHERE username = ?")
+    .get(normalizedUsername);
+  
+  res.json({ available: !existing });
+});
+
+app.post("/api/auth/register", (req: Request, res: Response) => {
+  const { id, username, avatar_url } = req.body;
+  
+  if (!id || !username) {
+    return res.status(400).json({ error: "id and username required" });
+  }
+  
+  const normalizedUsername = username.toLowerCase().trim();
+  
+  // Check if username is taken
+  const existing = db
+    .prepare("SELECT id FROM users WHERE username = ?")
+    .get(normalizedUsername);
+  
+  if (existing) {
+    return res.status(400).json({ error: "Username already taken" });
+  }
+  
+  try {
+    db.prepare(`
+      INSERT INTO users (id, username, avatar_url, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(id, normalizedUsername, avatar_url || null, Date.now());
+    
+    res.json({ success: true, username: normalizedUsername });
+  } catch (err: any) {
+    console.log("[REGISTER] Error:", err.message);
+    res.status(500).json({ error: "Failed to register user" });
+  }
+});
 
 app.get("/api/feed", (req: Request, res: Response) => {
   const bookmarks = db

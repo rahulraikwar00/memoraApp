@@ -5,11 +5,13 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { initDatabase } from '../lib/db';
 import { startSyncWorker } from '../lib/sync';
 import { useAuthStore } from '../stores/useAuthStore';
+import { isOnboardingComplete } from '../lib/user';
 import { colors } from '../constants/theme';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState<boolean>(true);
 
   useEffect(() => {
     console.log('Initializing database...');
@@ -21,6 +23,15 @@ export default function RootLayout() {
         await useAuthStore.getState().loadToken();
         startSyncWorker();
         console.log('Sync worker started');
+        
+        // Check if onboarding is complete (default to show welcome if check fails)
+        try {
+          const onboardingComplete = await isOnboardingComplete();
+          setShowWelcome(!onboardingComplete);
+        } catch (e) {
+          console.log('Onboarding check failed, showing welcome:', e);
+          setShowWelcome(true);
+        }
         
         setIsReady(true);
       })
@@ -61,9 +72,14 @@ export default function RootLayout() {
           contentStyle: {
             backgroundColor: colors.background,
           },
+          gestureEnabled: false,
         }}
       >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {showWelcome ? (
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
+        ) : (
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        )}
       </Stack>
     </>
   );

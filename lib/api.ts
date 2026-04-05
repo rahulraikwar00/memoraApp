@@ -145,3 +145,26 @@ export const syncApi = {
   sync: (payload: SyncPayload) =>
     api.post<{ success: boolean; synced: number }>("/api/sync", payload),
 };
+
+export interface CheckUsernameResponse {
+  available: boolean;
+}
+
+export interface RegisterUserResponse {
+  success: boolean;
+  username: string;
+  error?: string;
+}
+
+export const authApi = {
+  checkUsername: (username: string) =>
+    api.get<CheckUsernameResponse>(
+      `/api/auth/check-username?username=${encodeURIComponent(username)}`
+    ),
+  register: (id: string, username: string, avatarUrl?: string) =>
+      api.post<RegisterUserResponse>("/api/auth/register", {
+        id,
+        username,
+        avatar_url: avatarUrl,
+      }),
+};
