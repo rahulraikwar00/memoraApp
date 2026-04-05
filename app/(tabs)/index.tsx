@@ -1,10 +1,9 @@
 import { useEffect, useCallback } from 'react';
 import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
-import BookmarkCard from '../../components/BookmarkCard';
+import GridBookmarkCard from '../../components/GridBookmarkCard';
 import EmptyState from '../../components/EmptyState';
 import SkeletonCard from '../../components/SkeletonCard';
 import { Bookmark } from '../../lib/db';
@@ -34,71 +33,54 @@ export default function LibraryScreen() {
     await togglePublic(id);
   }, [togglePublic]);
 
-  const renderRightActions = useCallback(() => {
-    return (
-      <View style={styles.swipeActions}>
-        <View style={[styles.swipeAction, { backgroundColor: colors.accent }]} />
-      </View>
-    );
-  }, [colors.accent]);
-
-  const renderLeftActions = useCallback(() => {
-    return (
-      <View style={styles.swipeActions}>
-        <View style={[styles.swipeAction, { backgroundColor: colors.danger }]} />
-      </View>
-    );
-  }, [colors.danger]);
-
   const renderItem = useCallback(({ item }: { item: Bookmark }) => {
     return (
-      <Swipeable
-        renderRightActions={renderRightActions}
-        renderLeftActions={renderLeftActions}
-        onSwipeableOpen={(direction) => {
-          if (direction === 'left') {
-            handleDelete(item.id);
-          } else if (direction === 'right') {
-            handleTogglePublic(item.id);
-          }
+      <GridBookmarkCard
+        bookmark={item}
+        onPress={() => {
+          Alert.alert(
+            item.title || item.url,
+            'What would you like to do?',
+            [
+              { text: 'Open Link', onPress: () => Linking.openURL(item.url) },
+              { text: 'Toggle Public', onPress: () => handleTogglePublic(item.id) },
+              { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item.id) },
+              { text: 'Cancel', style: 'cancel' },
+            ]
+          );
         }}
-      >
-        <BookmarkCard
-          bookmark={item}
-          onPress={() => Linking.openURL(item.url)}
-          onDelete={() => handleDelete(item.id)}
-          onTogglePublic={() => handleTogglePublic(item.id)}
-        />
-      </Swipeable>
+      />
     );
-  }, [handleDelete, handleTogglePublic, renderRightActions, renderLeftActions]);
+  }, [handleDelete, handleTogglePublic]);
 
   const renderSkeleton = () => (
-    <View>
+    <View style={styles.skeletonContainer}>
       <SkeletonCard hasImage />
-      <SkeletonCard hasImage={false} />
+      <SkeletonCard hasImage />
     </View>
   );
 
   if (isLoading && bookmarks.length === 0) {
     return (
-      <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.list, { padding: spacing.lg }]}>
           {renderSkeleton()}
         </View>
-      </GestureHandlerRootView>
+      </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={bookmarks}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={[
           styles.list,
-          { padding: spacing.lg },
+          { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
           bookmarks.length === 0 && styles.emptyList
         ]}
         refreshControl={
@@ -118,7 +100,7 @@ export default function LibraryScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -127,17 +109,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   list: {},
+  columnWrapper: {
+    gap: 8,
+  },
   emptyList: {
     flex: 1,
   },
-  swipeActions: {
-    width: 80,
-    marginBottom: 12,
-  },
-  swipeAction: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
+  skeletonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

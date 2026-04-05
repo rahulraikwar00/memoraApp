@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../stores/useThemeStore';
 import { Bookmark } from '../lib/db';
 import TagChip from './TagChip';
@@ -9,6 +10,8 @@ import TagChip from './TagChip';
 interface GridBookmarkCardProps {
   bookmark: Bookmark;
   onPress?: () => void;
+  onVote?: () => void;
+  isVoted?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -17,7 +20,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 8;
 const NUM_COLUMNS = 2;
 
-export default function GridBookmarkCard({ bookmark, onPress }: GridBookmarkCardProps) {
+export default function GridBookmarkCard({ bookmark, onPress, onVote, isVoted }: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
   const CARD_WIDTH = (SCREEN_WIDTH - (spacing.lg * 2) - (CARD_GAP * (NUM_COLUMNS - 1))) / NUM_COLUMNS;
   const scale = useSharedValue(1);
@@ -38,6 +41,11 @@ export default function GridBookmarkCard({ bookmark, onPress }: GridBookmarkCard
   const domain = bookmark.domain || (() => { try { return new URL(bookmark.url).hostname; } catch { return ''; } })();
 
   const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null;
+
+  const handleVotePress = (e: any) => {
+    e.stopPropagation();
+    onVote?.();
+  };
 
   return (
     <AnimatedPressable
@@ -71,6 +79,15 @@ export default function GridBookmarkCard({ bookmark, onPress }: GridBookmarkCard
           <Text style={[styles.domain, { color: colors.textTertiary }]} numberOfLines={1}>
             {domain}
           </Text>
+          {onVote && (
+            <Pressable onPress={handleVotePress} style={styles.voteButton}>
+              <Ionicons 
+                name={isVoted ? 'heart' : 'heart-outline'} 
+                size={16} 
+                color={isVoted ? colors.danger : colors.textTertiary} 
+              />
+            </Pressable>
+          )}
         </View>
 
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -126,5 +143,8 @@ const styles = StyleSheet.create({
   tags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  voteButton: {
+    padding: 2,
   },
 });
