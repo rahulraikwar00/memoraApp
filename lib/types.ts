@@ -3,6 +3,9 @@ import { Bookmark } from "./db";
 
 export type ContentType = "link" | "image" | "note" | "voice";
 
+// V1 only supports links and text notes
+export const V1_SUPPORTED_TYPES: ContentType[] = ["link", "note", "image", "voice"];
+
 export const getContentType = (bookmark: Bookmark): ContentType => {
   if (bookmark.domain === "local-image") return "image";
   if (bookmark.domain === "local-note") return "note";

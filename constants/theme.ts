@@ -1,17 +1,17 @@
 export const darkColors = {
-  background: '#0A0A0A',
-  card: '#141414',
-  elevated: '#1C1C1C',
-  textPrimary: '#F5F5F5',
-  textSecondary: '#888888',
-  textTertiary: '#555555',
+  background: '#060606',
+  card: '#111111',
+  elevated: '#181818',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#A0A0A0',
+  textTertiary: '#707070',
   accent: '#6C63FF',
   accentLight: '#8B85FF',
   accentDark: '#5249CC',
   success: '#1DB954',
   danger: '#FF4444',
-  border: 'rgba(255,255,255,0.08)',
-  borderLight: 'rgba(255,255,255,0.12)',
+  border: 'rgba(255,255,255,0.06)',
+  borderLight: 'rgba(255,255,255,0.1)',
   statusBar: 'light',
 };
 
@@ -70,8 +70,8 @@ export const typography = {
 
 export const borderRadius = {
   sm: 8,
-  md: 12,
-  lg: 20,
+  md: 16,
+  lg: 24,
   pill: 9999,
 };
 

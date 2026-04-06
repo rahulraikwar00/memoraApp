@@ -126,7 +126,17 @@ export interface PreviewMetadata {
 }
 
 export const feedApi = {
-  getFeed: () => api.get<FeedResponse>("/api/feed"),
+  getFeed: (tags?: string[], limit?: number) => {
+    const params = new URLSearchParams();
+    if (tags && tags.length > 0) {
+      params.set('tags', tags.join(','));
+    }
+    if (limit) {
+      params.set('limit', limit.toString());
+    }
+    const query = params.toString();
+    return api.get<FeedResponse>(`/api/feed${query ? `?${query}` : ''}`);
+  },
   vote: (id: string) =>
     api.post<{ success: boolean }>(`/api/vote`, { item_id: id }),
 };

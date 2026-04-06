@@ -80,6 +80,14 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
     )
   `;
 
+  const createUserTags = `
+    CREATE TABLE IF NOT EXISTS user_tags (
+      tag TEXT PRIMARY KEY,
+      count INTEGER DEFAULT 0,
+      last_used INTEGER
+    )
+  `;
+
   const createIndexes = [
     `CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_bookmarks_is_deleted ON bookmarks(is_deleted)`,
@@ -89,6 +97,7 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
   try {
     await database.execAsync(createBookmarks);
     await database.execAsync(createSyncQueue);
+    await database.execAsync(createUserTags);
 
     // Migrate: add status column if it doesn't exist (for old databases)
     try {
@@ -212,6 +221,10 @@ export async function createBookmark(
 
   await addToSyncQueue("create", { ...data, id, created_at: now });
 
+  if (data.tags) {
+    await updateUserTags(data.tags);
+  }
+
   return {
     id,
     ...data,
@@ -281,6 +294,10 @@ export async function updateBookmark(
   );
 
   await addToSyncQueue("update", { id, ...data, updated_at: now });
+
+  if (data.tags) {
+    await updateUserTags(data.tags);
+  }
 }
 
 export async function deleteBookmark(id: string): Promise<void> {
@@ -378,5 +395,61 @@ export async function clearAllData(): Promise<void> {
   await database.execAsync(`
     DELETE FROM bookmarks;
     DELETE FROM sync_queue;
+    DELETE FROM user_tags;
   `);
+}
+
+export interface UserTag {
+  tag: string;
+  count: number;
+  last_used: number;
+}
+
+export async function updateUserTags(tags: string): Promise<void> {
+  const database = await getDb();
+  const tagsArray = JSON.parse(tags || "[]") as string[];
+  const now = Date.now();
+
+  for (const tag of tagsArray) {
+    const normalizedTag = tag.toLowerCase().trim();
+    if (!normalizedTag) continue;
+
+    await database.runAsync(
+      `INSERT INTO user_tags (tag, count, last_used) VALUES (?, 1, ?)
+       ON CONFLICT(tag) DO UPDATE SET count = count + 1, last_used = ?`,
+      [normalizedTag, now, now],
+    );
+  }
+}
+
+export async function getUserTopTags(limit: number = 10): Promise<UserTag[]> {
+  const database = await getDb();
+  return database.getAllAsync<UserTag>(
+    `SELECT tag, count, last_used FROM user_tags ORDER BY count DESC LIMIT ?`,
+    [limit],
+  );
+}
+
+export async function getDiscoverFeed(userTags: string[]): Promise<Bookmark[]> {
+  const database = await getDb();
+  
+  if (userTags.length === 0) {
+    return database.getAllAsync<Bookmark>(
+      `SELECT * FROM bookmarks 
+       WHERE is_deleted = 0 AND domain NOT IN ('local-image', 'local-note', 'local-voice')
+       ORDER BY created_at DESC LIMIT 50`,
+    );
+  }
+
+  const placeholders = userTags.map(() => `LOWER(tags) LIKE ?`).join(" OR ");
+  const params = userTags.map((tag) => `%${tag.toLowerCase()}%`);
+
+  return database.getAllAsync<Bookmark>(
+    `SELECT * FROM bookmarks 
+     WHERE is_deleted = 0 
+     AND domain NOT IN ('local-image', 'local-note', 'local-voice')
+     AND (${placeholders})
+     ORDER BY created_at DESC LIMIT 50`,
+    params,
+  );
 }

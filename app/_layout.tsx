@@ -13,6 +13,7 @@ import { initDatabase } from "../lib/db";
 import { startSyncWorker } from "../lib/sync";
 import { isOnboardingComplete } from "../lib/user";
 import { useAuthStore } from "../stores/useAuthStore";
+import "../global.css";
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);

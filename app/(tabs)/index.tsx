@@ -1,20 +1,43 @@
-import { useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking, Clipboard } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking, Clipboard, Text, ScrollView, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
+import { useAudioStore } from '../../stores/useAudioStore';
 import GridBookmarkCard from '../../components/GridBookmarkCard';
 import EmptyState from '../../components/EmptyState';
 import SkeletonCard from '../../components/SkeletonCard';
 import { Bookmark } from '../../lib/db';
 
 export default function LibraryScreen() {
-  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic, toggleFavorite } = useBookmarkStore();
+  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic, performSearch } = useBookmarkStore();
   const { colors, spacing } = useThemeStore();
+  const { stop } = useAudioStore();
 
-  useEffect(() => {
-    loadBookmarks();
-  }, [loadBookmarks]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const categories = ['All', 'Link', 'Image', 'Note', 'Voice', 'AI', 'Art'];
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBookmarks();
+      return () => {
+        stop();
+      };
+    }, [loadBookmarks, stop])
+  );
+
+  const handleCategoryPress = (category: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedCategory(category);
+    if (category === 'All') {
+      performSearch('');
+    } else {
+      performSearch(category.toLowerCase());
+    }
+  };
 
   const handleDelete = useCallback(async (id: string) => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -25,11 +48,6 @@ export default function LibraryScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await togglePublic(id);
   }, [togglePublic]);
-
-  const handleToggleFavorite = useCallback(async (id: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await toggleFavorite(id);
-  }, [toggleFavorite]);
 
   const handleOpenLink = useCallback(async (url: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -53,13 +71,13 @@ export default function LibraryScreen() {
         bookmark={item}
         onOpenLink={() => handleOpenLink(item.url)}
         onTogglePublic={() => handleTogglePublic(item.id)}
-        onToggleFavorite={() => handleToggleFavorite(item.id)}
+        onEdit={() => {/* Logic for edit if needed */}}
         onShare={() => handleShare(item)}
         onCopyUrl={() => handleCopyUrl(item.url)}
         onDelete={() => handleDelete(item.id)}
       />
     );
-  }, [handleOpenLink, handleTogglePublic, handleToggleFavorite, handleShare, handleCopyUrl, handleDelete]);
+  }, [handleOpenLink, handleTogglePublic, handleShare, handleCopyUrl, handleDelete]);
 
   const renderSkeleton = () => (
     <View style={styles.skeletonContainer}>
@@ -68,9 +86,51 @@ export default function LibraryScreen() {
     </View>
   );
 
+  const renderHeader = () => (
+    <View style={[styles.headerContainer, { paddingHorizontal: spacing.lg }]}>
+      <View style={styles.topRow}>
+        <Pressable style={styles.iconContainer}>
+          <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
+        </Pressable>
+        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Captures</Text>
+        <View style={{ width: 22 }} />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.categoryChips, { paddingVertical: spacing.md }]}
+      >
+        {categories.map((cat) => (
+          <Pressable
+            key={cat}
+            onPress={() => handleCategoryPress(cat)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: selectedCategory === cat ? colors.accent : colors.elevated,
+                marginRight: spacing.sm,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                { color: selectedCategory === cat ? '#fff' : colors.textSecondary },
+              ]}
+            >
+              {cat}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   if (isLoading && bookmarks.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderHeader()}
         <View style={[styles.list, { padding: spacing.lg }]}>
           {renderSkeleton()}
         </View>
@@ -85,6 +145,7 @@ export default function LibraryScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
+        ListHeaderComponent={renderHeader}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={[
           styles.list,
@@ -115,10 +176,41 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 60,
+  },
+  headerContainer: {
+    paddingBottom: 4,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  iconContainer: {
+    padding: 4,
+  },
+  categoryChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   list: {},
   columnWrapper: {
-    gap: 8,
+    gap: 12,
+    marginBottom: 12,
   },
   emptyList: {
     flex: 1,
@@ -126,6 +218,6 @@ const styles = StyleSheet.create({
   skeletonContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
 });

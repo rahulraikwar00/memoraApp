@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { View, FlatList, StyleSheet, Pressable, Text } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useBookmarkStore } from '../../stores/useBookmarkStore';
 import { useThemeStore } from '../../stores/useThemeStore';
+import { useAudioStore } from '../../stores/useAudioStore';
 import SearchBar from '../../components/SearchBar';
 import GridBookmarkCard from '../../components/GridBookmarkCard';
 import EmptyState from '../../components/EmptyState';
@@ -29,9 +31,19 @@ const TAG_FILTERS = ['Dev', 'Design', 'Video', 'Article', 'Research'];
 export default function SearchScreen() {
   const { bookmarks, performSearch } = useBookmarkStore();
   const { colors, spacing, typography, borderRadius } = useThemeStore();
+  const { stop } = useAudioStore();
   const [query, setQuery] = useState('');
   const [activeTypeFilter, setActiveTypeFilter] = useState('all');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        console.log('Search screen unfocused, stopping audio');
+        stop();
+      };
+    }, [stop])
+  );
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {

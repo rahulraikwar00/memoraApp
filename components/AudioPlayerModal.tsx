@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   View,
@@ -7,7 +7,6 @@ import {
   Pressable,
   Alert,
 } from "react-native";
-import { Audio } from "expo-av";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useAudioStore } from "../stores/useAudioStore";
 import { Bookmark } from "../lib/db";
 import TagChip from "./TagChip";
 
@@ -93,24 +93,22 @@ export default function AudioPlayerModal({
   const { colors, spacing } = useThemeStore();
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState<number | null>(null);
-  const [position, setPosition] = useState<number>(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const { currentlyPlayingId, isPlaying: globalIsPlaying, play, pause, stop } = useAudioStore();
+  const isThisPlaying = currentlyPlayingId === bookmark.id && globalIsPlaying;
 
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
+      if (currentlyPlayingId === bookmark.id) {
+        stop();
       }
     };
-  }, []);
+  }, [currentlyPlayingId, bookmark.id, stop]);
+
+  const [duration, setDuration] = useState<number | null>(null);
+  const [position, setPosition] = useState<number>(0);
 
   useEffect(() => {
-    if (!visible && soundRef.current) {
-      soundRef.current.unloadAsync();
-      soundRef.current = null;
-      setIsPlaying(false);
+    if (!visible) {
       setPosition(0);
       setDuration(null);
     }
@@ -130,54 +128,15 @@ export default function AudioPlayerModal({
       return;
     }
 
-    try {
-      if (isPlaying && soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
-        return;
-      }
-
-      if (soundRef.current && !isPlaying) {
-        await soundRef.current.playAsync();
-        setIsPlaying(true);
-        return;
-      }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: bookmark.local_path },
-        { shouldPlay: true },
-        (status) => {
-          if (status.isLoaded) {
-            if (status.durationMillis) {
-              setDuration(status.durationMillis);
-            }
-            if (status.positionMillis !== undefined) {
-              setPosition(status.positionMillis);
-            }
-            if (status.didJustFinish) {
-              setIsPlaying(false);
-              setPosition(0);
-            }
-          }
-        }
-      );
-
-      soundRef.current = sound;
-      setIsPlaying(true);
-    } catch (err) {
-      console.error("Playback error:", err);
-      Alert.alert("Error", "Failed to play audio");
+    if (isThisPlaying) {
+      await pause();
+    } else {
+      await play(bookmark.id, bookmark.local_path);
     }
   };
 
   const handleSeek = async (forward: boolean) => {
-    if (!soundRef.current) return;
-    
-    const newPosition = forward ? position + 10000 : position - 10000;
-    const clampedPosition = Math.max(0, Math.min(newPosition, duration || 0));
-    
-    await soundRef.current.setPositionAsync(clampedPosition);
-    setPosition(clampedPosition);
+    Alert.alert("Seeking", "Seeking is not supported in grid view");
   };
 
   const handleDelete = () => {
@@ -232,7 +191,7 @@ export default function AudioPlayerModal({
               <WaveformBar
                 key={index}
                 height={height}
-                isPlaying={isPlaying}
+                isPlaying={isThisPlaying}
                 index={index}
                 color={colors.accent}
               />
@@ -275,7 +234,7 @@ export default function AudioPlayerModal({
               onPress={handlePlayPause}
             >
               <Ionicons
-                name={isPlaying ? "pause" : "play"}
+                name={isThisPlaying ? "pause" : "play"}
                 size={32}
                 color="#fff"
               />

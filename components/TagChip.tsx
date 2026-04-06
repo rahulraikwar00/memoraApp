@@ -5,11 +5,20 @@ import { colors, spacing, typography, borderRadius } from '../constants/theme';
 interface TagChipProps {
   tag: string;
   small?: boolean;
+  light?: boolean;
 }
 
-export default function TagChip({ tag, small }: TagChipProps) {
+export default function TagChip({ tag, small, light }: TagChipProps) {
   return (
-    <Text style={[styles.tag, small && styles.tagSmall]}>{tag}</Text>
+    <Text 
+      style={[
+        styles.tag, 
+        small && styles.tagSmall,
+        light && styles.tagLight
+      ]}
+    >
+      #{tag}
+    </Text>
   );
 }
 
@@ -27,5 +36,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
+  },
+  tagLight: {
+    color: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
 });

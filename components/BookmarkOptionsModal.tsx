@@ -168,16 +168,18 @@ export default function BookmarkOptionsModal({
               </Pressable>
             )}
 
-            <Pressable
-              style={[styles.option, { backgroundColor: colors.elevated }]}
-              onPress={handleCopyUrl}
-            >
-              <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
-              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                Copy URL
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-            </Pressable>
+            {!!bookmark.url && (
+              <Pressable
+                style={[styles.option, { backgroundColor: colors.elevated }]}
+                onPress={handleCopyUrl}
+              >
+                <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
+                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                  Copy URL
+                </Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+              </Pressable>
+            )}
 
             {onDelete && (
               <Pressable

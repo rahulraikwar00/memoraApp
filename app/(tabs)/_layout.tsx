@@ -1,13 +1,37 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
-import { Platform, StyleSheet, View, Image, Pressable } from "react-native";
-import { useState, useEffect } from "react";
-import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { router, Tabs } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import {
+  AppState,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 import { colors } from "../../constants/theme";
 import { getUserAvatar } from "../../lib/user";
+import { useAudioStore } from "../../stores/useAudioStore";
 
 export default function TabLayout() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        useAudioStore.getState().stop();
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        useAudioStore.getState().stop();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     getUserAvatar().then(setAvatarUrl);
@@ -16,10 +40,17 @@ export default function TabLayout() {
   const HeaderRight = () => (
     <Pressable
       onPress={() => router.push("/settings")}
-      style={({ pressed }) => [styles.headerAvatar, pressed && styles.headerAvatarPressed]}
+      style={({ pressed }) => [
+        styles.headerAvatar,
+        pressed && styles.headerAvatarPressed,
+      ]}
     >
       {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.headerAvatarImage} resizeMode="cover" />
+        <Image
+          source={{ uri: avatarUrl }}
+          style={styles.headerAvatarImage}
+          resizeMode="cover"
+        />
       ) : (
         <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
           <Ionicons name="person" size={20} color={colors.textSecondary} />

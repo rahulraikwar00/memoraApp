@@ -554,7 +554,7 @@ export default function SaveScreen() {
       >
         <View style={[styles.header, { marginBottom: spacing.xxl }]}>
           <Text style={[styles.title, { color: colors.textPrimary, marginBottom: spacing.xs, ...typography.hero }]}>Save</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary, ...typography.body }]}>Save links, photos, notes, or voice</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary, ...typography.body }]}>Save links or text notes</Text>
         </View>
 
         <View style={[styles.segmentedControl, { backgroundColor: colors.elevated, marginBottom: spacing.xxl }]}>
@@ -568,12 +568,8 @@ export default function SaveScreen() {
               onPress={() => setContentType(type)}
             >
               <Ionicons 
-                name={
-                  type === 'link' ? 'link' : 
-                  type === 'image' ? 'image' : 
-                  type === 'note' ? 'document-text' : 'mic'
-                } 
-                size={20} 
+                name={type === 'link' ? 'link' : type === 'note' ? 'document-text' : type === 'image' ? 'image' : 'mic'} 
+                size={18} 
                 color={contentType === type ? '#fff' : colors.textSecondary} 
               />
               <Text style={[
