@@ -30,6 +30,14 @@ interface GridBookmarkCardProps {
   onVoicePlay?: (bookmark: Bookmark) => void;
   onLongPress?: () => void;
   isVoted?: boolean;
+  variant?: "feed" | "default";
+  onUpvote?: () => void;
+  onDownvote?: () => void;
+  onReport?: () => void;
+  onSave?: () => void;
+  isUpvoted?: boolean;
+  isSaved?: boolean;
+  saveCount?: number;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -58,6 +66,14 @@ export default function GridBookmarkCard({
   onVoicePlay,
   onLongPress,
   isVoted,
+  variant = "default",
+  onUpvote,
+  onDownvote,
+  onReport,
+  onSave,
+  isUpvoted,
+  isSaved,
+  saveCount,
 }: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
   const CARD_WIDTH =
@@ -260,6 +276,66 @@ export default function GridBookmarkCard({
               ))}
             </View>
           )}
+
+          {variant === 'feed' && (
+            <View style={styles.socialButtons}>
+              <Pressable
+                style={[styles.socialButton, { backgroundColor: isUpvoted ? colors.accent : colors.card }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onUpvote?.();
+                }}
+              >
+                <Ionicons
+                  name="thumbs-up"
+                  size={14}
+                  color={isUpvoted ? '#fff' : colors.textSecondary}
+                />
+                <Text style={[styles.socialButtonText, { color: isUpvoted ? '#fff' : colors.textSecondary }]}>
+                  {saveCount || 0}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.socialButton, { backgroundColor: colors.card }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDownvote?.();
+                }}
+              >
+                <Ionicons
+                  name="thumbs-down"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+              <Pressable
+                style={[styles.socialButton, { backgroundColor: colors.card }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onReport?.();
+                }}
+              >
+                <Ionicons
+                  name="flag"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+              <Pressable
+                style={[styles.socialButton, { backgroundColor: isSaved ? colors.accent : colors.card }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onSave?.();
+                }}
+              >
+                <Ionicons
+                  name={isSaved ? "bookmark" : "bookmark-outline"}
+                  size={14}
+                  color={isSaved ? '#fff' : colors.textSecondary}
+                />
+              </Pressable>
+            </View>
+          )}
         </View>
       </AnimatedPressable>
 
@@ -305,6 +381,26 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: 140,
+  },
+  socialButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginTop: 4,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  socialButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   voicePreview: {
     flexDirection: "row",

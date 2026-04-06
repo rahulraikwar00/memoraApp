@@ -48,4 +48,20 @@ router.get("/", (req: Request, res: Response) => {
   res.json({ trending, recent });
 });
 
+router.post("/report", (req: Request, res: Response) => {
+  const { item_id, reason } = req.body;
+  if (!item_id || !reason) {
+    return res.status(400).json({ error: "item_id and reason required" });
+  }
+
+  try {
+    // Increment report count
+    dbProvider.reportItem(item_id, reason);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Report error:", e);
+    res.status(500).json({ error: "Failed to report" });
+  }
+});
+
 export default router;

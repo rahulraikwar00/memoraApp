@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Text, Linking } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Text, Linking, Alert } from 'react-native';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { getUserTopTags } from '../../lib/db';
 import { feedApi, FeedItem, FeedResponse } from '../../lib/api';
@@ -27,7 +27,8 @@ export default function DiscoverScreen() {
       const data: FeedResponse = await feedApi.getFeed([], 50);
       const allItems = [...(data.trending || []), ...(data.recent || [])];
       const unique = Array.from(new Map(allItems.map(i => [i.id, i])).values());
-      setFeed(unique);
+      const filtered = unique.filter(item => item.url && item.image_url);
+      setFeed(filtered);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       setError(msg.includes('Network') || msg.includes('fetch') ? 'Server not running' : 'Failed to load feed');
@@ -72,6 +73,38 @@ export default function DiscoverScreen() {
     }
   };
 
+  const handleDownvote = async (item: FeedItem) => {
+    // Placeholder: downvote not implemented in API yet
+    Alert.alert("Downvote", "Downvote feature coming soon!");
+  };
+
+  const handleReport = async (item: FeedItem) => {
+    Alert.prompt(
+      "Report Content",
+      "Please provide a reason for reporting this content:",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Report",
+          onPress: async (value?: string) => {
+            if (!value?.trim()) return;
+            try {
+              await fetch('/api/feed/report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: item.id, reason: value }),
+              });
+              Alert.alert("Reported", "Thank you for your feedback. We will review this content.");
+            } catch {
+              Alert.alert("Error", "Failed to report content.");
+            }
+          }
+        }
+      ],
+      "plain-text"
+    );
+  };
+
   const renderItem = ({ item }: { item: FeedItem }) => (
     <GridBookmarkCard
       variant="feed"
@@ -97,6 +130,8 @@ export default function DiscoverScreen() {
       onUpvote={() => handleUpvote(item)}
       isUpvoted={upvotedIds.has(item.id)}
       saveCount={item.save_count}
+      onDownvote={() => handleDownvote(item)}
+      onReport={() => handleReport(item)}
     />
   );
 

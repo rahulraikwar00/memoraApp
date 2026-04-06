@@ -18,7 +18,10 @@ export interface BookmarkRow {
   url: string;
   title: string | null;
   description: string | null;
+  image_url: string | null;
+  domain: string | null;
   save_count: number;
+  reports_count: number;
   created_at: number;
   tags: string; // JSON array string from aggregation
 }
@@ -55,4 +58,7 @@ export interface DatabaseProvider {
 
   // ── Votes ───────────────────────────────────────────────────────────────
   vote(itemId: string): void;
+
+  // ── Reports ──────────────────────────────────────────────────────────────
+  reportItem(itemId: string, reason: string): void;
 }

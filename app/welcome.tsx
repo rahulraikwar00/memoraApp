@@ -163,7 +163,7 @@ export default function WelcomeScreen() {
               Pick a username
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              This is how you'll appear to others
+              This is how you&apos;ll appear to others
             </Text>
 
             <View style={[styles.avatarContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
