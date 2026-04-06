@@ -1,5 +1,166 @@
 # Memora - Project Documentation
 
+## App Flow Diagram
+
+```mermaid
+flowchart TD
+    %% Entry Points
+    Start([App Launch]) --> AuthCheck{Authenticated?}
+    
+    %% Authentication
+    AuthCheck -->|No| Register[Register / Login]
+    Register --> AuthCheck
+    AuthCheck -->|Yes| MainTabs
+    
+    %% Main Tabs
+    MainTabs --> Tab1[Library]
+    MainTabs --> Tab2[Search]
+    MainTabs --> Tab3[Save]
+    MainTabs --> Tab4[Discover]
+    MainTabs --> Tab5[Settings]
+    
+    %% Library Flow
+    Tab1 --> ViewBookmarks[View Bookmarks]
+    ViewBookmarks --> Action1{Favorite?}
+    Action1 -->|Yes| Unfavorite[Remove from Favorites]
+    Action1 -->|No| Favorite[Add to Favorites]
+    ViewBookmarks --> Action2{Open?}
+    Action2 --> OpenBrowser[Open in Browser]
+    ViewBookmarks --> Action3{Delete?}
+    Action3 --> Delete[Delete Bookmark]
+    
+    %% Search Flow
+    Tab2 --> SearchInput[Enter Search Query]
+    SearchInput --> Filter[Apply Filters]
+    Filter --> TypeFilter{Content Type?}
+    TypeFilter -->|Link| LinkResults[Link Results]
+    TypeFilter -->|Image| ImageResults[Image Results]
+    TypeFilter -->|Note| NoteResults[Note Results]
+    TypeFilter -->|Voice| VoiceResults[Voice Results]
+    Filter --> TagFilter{Tags?}
+    TagFilter --> FilteredResults[Filtered Results]
+    
+    %% Save Flow
+    Tab3 --> EnterURL[Enter URL]
+    EnterURL --> Extract[Extract Metadata]
+    Extract --> AddTags[Add Tags]
+    AddTags --> SetPrivacy{Set Public/Private}
+    SetPrivacy --> Save[Save Bookmark]
+    Save --> TrackTags[Track Tags in user_tags]
+    TrackTags --> SyncToServer{Sync Enabled?}
+    SyncToServer -->|Yes| Sync[Sync to Server]
+    
+    %% Discover Flow
+    Tab4 --> GetTopTags[Get Top 10 Tags]
+    GetTopTags --> ServerFeed[Query Server API]
+    ServerFeed --> PersonalizedFeed[Personalized Feed]
+    PersonalizedFeed --> Vote{Vote on Bookmark}
+    Vote -->|Upvote| Upvote[Upvote]
+    Vote -->|Downvote| Downvote[Downvote]
+    
+    %% Settings Flow
+    Tab5 --> ThemeSettings[Theme Settings]
+    ThemeSettings --> DarkMode{Dark Mode?}
+    DarkMode -->|Yes| Dark[Dark Theme]
+    DarkMode -->|No| Light[Light Theme]
+    Tab5 --> SyncSettings[Sync Settings]
+    SyncSettings --> ManualSync[Manual Sync]
+    ManualSync --> ServerSync[Sync to Server]
+    
+    %% Audio Playback
+    VoiceResults --> PlayAudio[Play Voice Note]
+    PersonalizedFeed --> PlayAudio
+    PlayAudio --> AudioPlayer[Audio Player Active]
+    AudioPlayer --> TabSwitch{Tab Switch?}
+    TabSwitch -->|Yes| StopAudio[Stop Audio]
+    TabSwitch -->|No| ContinueAudio[Continue Playing]
+```
+
+## System Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph Client["Mobile App (Expo/React Native)"]
+        UI["UI Layer<br/>Screens & Components"]
+        State["Zustand State<br/>Stores"]
+        API["API Client<br/>lib/api.ts"]
+        DB["Local SQLite<br/>expo-sqlite"]
+    end
+    
+    subgraph Server["Backend Server (Express.js)"]
+        Express["Express Server<br/>index.ts"]
+        Routes["API Routes<br/>(/api/feed, /api/sync, ...)"]
+        DBServer["better-sqlite3<br/>Database"]
+    end
+    
+    subgraph External["External Services"]
+        Browser["Web Browser<br/>(Open URLs)"]
+        Internet["Internet<br/>(URL Metadata)"]
+    end
+    
+    UI --> State
+    State --> DB
+    State --> API
+    API --> Express
+    Express --> Routes
+    Routes --> DBServer
+    UI --> Browser
+    API --> Internet
+    
+    %% Data Flow Annotations
+    DB -- "Local Storage<br/>bookmarks, user_tags" --> DB
+    Express -- "Sync<br/>bookmarks, tags" --> API
+    Internet -- "Metadata Extraction<br/>(title, desc, image)" --> API
+```
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as UI Layer
+    participant Store as Zustand Store
+    participant LocalDB as Local SQLite
+    participant API as API Client
+    participant Server as Express Server
+    participant RemoteDB as Server Database
+    
+    Note over User,Server: Save Bookmark Flow
+    User->>UI: Enter URL
+    UI->>Store: saveBookmark(url)
+    Store->>LocalDB: INSERT bookmarks
+    Store->>LocalDB: UPDATE user_tags
+    LocalDB-->>Store: Success
+    Store->>API: POST /api/sync
+    API->>Server: Sync Request
+    Server->>RemoteDB: INSERT/UPDATE bookmarks
+    Server-->>API: Success
+    API-->>Store: Synced
+    Store-->>UI: Updated
+    
+    Note over User,Server: Discover Feed Flow
+    User->>UI: Open Discover Tab
+    UI->>Store: getTopTags()
+    Store->>LocalDB: SELECT top 10 tags
+    LocalDB-->>Store: tags (react, design)
+    Store->>API: GET /api/feed?tags=react,design
+    API->>Server: Feed Request
+    Server->>RemoteDB: Query by tags
+    RemoteDB-->>Server: Feed items
+    Server-->>API: JSON response
+    API-->>Store: Feed data
+    Store-->>UI: Render Feed
+    
+    Note over User,Server: Audio Playback Flow
+    User->>UI: Tap Voice Bookmark
+    UI->>Store: playAudio(id, uri)
+    Store->>Store: Set currentlyPlayingId
+    Store->>UI: Show Audio Player
+    UI-->>User: Playing...
+    User->>UI: Switch Tab
+    UI->>Store: stopAudio()
+    Store->>Store: Clear currentlyPlayingId
+    Note over UI,Store: Auto-stop on focus blur
+```
+
 ## Overview
 
 Memora is a mobile bookmark management app built with Expo (React Native). It allows users to save, organize, and discover web bookmarks with tags. The app features a personalized discovery feed that recommends bookmarks based on user's saved interests.
