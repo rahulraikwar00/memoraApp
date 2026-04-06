@@ -1,6 +1,8 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import EmptyState from "../../components/EmptyState";
 import GridBookmarkCard from "../../components/GridBookmarkCard";
 import SearchBar from "../../components/SearchBar";
@@ -21,9 +23,9 @@ const TYPE_FILTERS = [
 const TAG_FILTERS = ["Dev", "Design", "Video", "Article", "Research"];
 
 export default function SearchScreen() {
-  const { bookmarks, performSearch } = useBookmarkStore();
+  const { bookmarks, performSearch, removeBookmark, togglePublic, updateBookmark } = useBookmarkStore();
   const { colors, spacing, typography, borderRadius } = useThemeStore();
-  const { stop } = useAudioStore();
+  const { stop, play, setShowPlayer } = useAudioStore();
   const [query, setQuery] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -108,9 +110,57 @@ export default function SearchScreen() {
     </View>
   );
 
+  const handleOpenLink = useCallback(async (url: string) => {
+    try {
+      if (!url) return;
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      Alert.alert("Error", "Could not open link");
+    }
+  }, []);
+
+  const handleEdit = useCallback((bookmark: Bookmark) => {
+    Alert.prompt(
+      "Edit Title",
+      "Enter a new title for this bookmark",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Save", 
+          onPress: (newTitle?: string) => {
+            if (newTitle) {
+              updateBookmark(bookmark.id, { title: newTitle });
+            }
+          } 
+        }
+      ],
+      "plain-text",
+      bookmark.title || ""
+    );
+  }, [updateBookmark]);
+
   const renderItem = useCallback(
-    ({ item }: { item: Bookmark }) => <GridBookmarkCard bookmark={item} />,
-    [],
+    ({ item }: { item: Bookmark }) => (
+      <GridBookmarkCard 
+        bookmark={item} 
+        onPress={() => {
+          if (item.domain === 'local-voice' || item.url?.includes('m4a')) {
+            setShowPlayer(true);
+          }
+        }}
+        onOpenLink={() => handleOpenLink(item.url)}
+        onVoicePlay={(bookmark) => {
+          if (bookmark.local_path) {
+            const cleanTitle = bookmark.title?.replace(/\s*\(\d+:\d+\)/, "") || "Voice Note";
+            play(bookmark.id, cleanTitle, bookmark.local_path);
+          }
+        }}
+        onDelete={() => removeBookmark(item.id)}
+        onTogglePublic={() => togglePublic(item.id)}
+        onEdit={() => handleEdit(item)}
+      />
+    ),
+    [play, removeBookmark, togglePublic, handleEdit, setShowPlayer, handleOpenLink],
   );
 
   const renderHeader = () => (

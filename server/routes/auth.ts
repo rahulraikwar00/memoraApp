@@ -26,6 +26,11 @@ router.post("/register", (req: Request, res: Response) => {
   const { id, avatar_url } = parsed.data;
   const username = parsed.data.username.toLowerCase().trim();
 
+  // Check if device ID already registered
+  if (dbProvider.getUserById(id)) {
+    return res.status(409).json({ error: "Device already registered", username });
+  }
+
   if (!dbProvider.checkUsernameAvailable(username)) {
     return res.status(400).json({ error: "Username already taken" });
   }

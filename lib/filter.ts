@@ -28,17 +28,23 @@ export const filterBookmarks = (
     }
 
     if (tagFilter) {
-      const tags = JSON.parse(bookmark.tags || '[]') as string[];
-      if (!tags.some(tag => tag.toLowerCase().includes(tagFilter.toLowerCase()))) {
+      try {
+        const tags = JSON.parse(bookmark.tags || '[]') as string[];
+        const tagFilterLower = tagFilter.toLowerCase();
+        if (!tags.some(tag => tag && tag.toLowerCase().includes(tagFilterLower))) {
+          return false;
+        }
+      } catch (e) {
+        console.error('Error parsing tags:', e);
         return false;
       }
     }
 
     if (query) {
       const searchLower = query.toLowerCase();
-      const titleMatch = bookmark.title?.toLowerCase().includes(searchLower);
-      const domainMatch = bookmark.domain?.toLowerCase().includes(searchLower);
-      const urlMatch = bookmark.url?.toLowerCase().includes(searchLower);
+      const titleMatch = bookmark.title?.toLowerCase().includes(searchLower) || false;
+      const domainMatch = bookmark.domain?.toLowerCase().includes(searchLower) || false;
+      const urlMatch = bookmark.url?.toLowerCase().includes(searchLower) || false;
       if (!titleMatch && !domainMatch && !urlMatch) {
         return false;
       }

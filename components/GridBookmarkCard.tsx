@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, Dimensions, Alert } from "react-native";
 import { Image } from "expo-image";
-import { Audio } from "expo-av";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useAudioStore } from "../stores/useAudioStore";
 import { Bookmark } from "../lib/db";
-import { getContentType, getContentIcon } from "../lib/types";
+import { getContentType, getContentIcon, getContentLabel } from "../lib/types";
 import TagChip from "./TagChip";
 import NoteReaderModal from "./NoteReaderModal";
 import ImageViewerModal from "./ImageViewerModal";
@@ -26,6 +27,8 @@ interface GridBookmarkCardProps {
   onCopyUrl?: () => void;
   onDelete?: () => void;
   onVote?: () => void;
+  onVoicePlay?: (bookmark: Bookmark) => void;
+  onLongPress?: () => void;
   isVoted?: boolean;
 }
 
@@ -37,9 +40,9 @@ const NUM_COLUMNS = 2;
 
 const CARD_HEIGHTS = {
   voice: 80,
-  note: 120,
+  note: 100,
   image: 200,
-  link: 140,
+  link: 120,
 };
 
 export default function GridBookmarkCard({
@@ -52,6 +55,8 @@ export default function GridBookmarkCard({
   onCopyUrl,
   onDelete,
   onVote,
+  onVoicePlay,
+  onLongPress,
   isVoted,
 }: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
@@ -63,19 +68,13 @@ export default function GridBookmarkCard({
   const contentType = getContentType(bookmark);
   const CARD_HEIGHT = CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
 
+  const { currentlyPlayingId, isPlaying: globalIsPlaying } = useAudioStore();
+  const isCurrentlyPlaying = currentlyPlayingId === bookmark.id;
+  const isPlaying = isCurrentlyPlaying && globalIsPlaying;
+
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -89,63 +88,44 @@ export default function GridBookmarkCard({
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
-  const handleVoicePlay = async () => {
+  const handleVoicePlay = () => {
     if (!bookmark.local_path) {
       Alert.alert("Error", "Audio file not found");
       return;
     }
-
-    try {
-      if (isPlaying && soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
-        return;
-      }
-
-      if (soundRef.current && !isPlaying) {
-        await soundRef.current.playAsync();
-        setIsPlaying(true);
-        return;
-      }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: bookmark.local_path },
-        { shouldPlay: true },
-        (status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setIsPlaying(false);
-            soundRef.current?.setPositionAsync(0);
-          }
-        }
-      );
-
-      soundRef.current = sound;
-      setIsPlaying(true);
-    } catch (err) {
-      console.error("Playback error:", err);
-      Alert.alert("Error", "Failed to play audio");
-    }
+    onVoicePlay?.(bookmark);
   };
 
   const handleCardPress = () => {
     switch (contentType) {
-      case "voice":
-        handleVoicePlay();
+      case "image":
+        setShowImageModal(true);
         break;
       case "note":
         setShowNoteModal(true);
         break;
-      case "image":
-        setShowImageModal(true);
-        break;
       case "link":
-      default:
+        onOpenLink?.();
+        break;
+      case "voice":
         if (onPress) {
           onPress();
         } else {
           setShowOptionsModal(true);
         }
         break;
+      default:
+        setShowOptionsModal(true);
+        break;
+    }
+  };
+
+  const handleLongPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (onLongPress) {
+      onLongPress();
+    } else {
+      setShowOptionsModal(true);
     }
   };
 
@@ -183,41 +163,11 @@ export default function GridBookmarkCard({
     }
 
     if (contentType === 'voice') {
-      return (
-        <View style={[styles.voicePreview, { backgroundColor: colors.elevated }]}>
-          <Pressable
-            style={[styles.playButton, { backgroundColor: colors.accent }]}
-            onPress={handleVoicePlay}
-          >
-            <Ionicons
-              name={isPlaying ? "pause" : "play"}
-              size={20}
-              color="#fff"
-            />
-          </Pressable>
-          <View style={styles.voiceInfo}>
-            <Text style={[styles.voiceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-              {bookmark.title?.replace(/\s*\(\d+:\d+\)/, "") || "Voice Note"}
-            </Text>
-            <Text style={[styles.voiceStatus, { color: colors.textTertiary }]}>
-              {isPlaying ? "Playing..." : "Tap to play"}
-            </Text>
-          </View>
-        </View>
-      );
+      return null; // Removed redundant voice preview, controls are now in main body
     }
 
     if (contentType === 'note') {
-      const noteText = bookmark.description || bookmark.title || "";
-      const preview = noteText.length > 80 ? noteText.substring(0, 80) + "..." : noteText;
-      return (
-        <View style={[styles.notePreview, { backgroundColor: colors.elevated }]}>
-          <Ionicons name="document-text" size={24} color={colors.accent} />
-          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={3}>
-            {preview}
-          </Text>
-        </View>
-      );
+      return null; // Removed redundant note preview, title/icon in header is enough
     }
 
     if (bookmark.image_url) {
@@ -248,6 +198,7 @@ export default function GridBookmarkCard({
           },
         ]}
         onPress={handleCardPress}
+        onLongPress={handleLongPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         accessibilityLabel={`Bookmark: ${bookmark.title || bookmark.url}`}
@@ -274,19 +225,33 @@ export default function GridBookmarkCard({
               style={[styles.domain, { color: colors.textTertiary }]}
               numberOfLines={1}
             >
-              {contentType === 'link' ? domain : getContentIcon(contentType)}
+              {contentType === 'link' ? domain : getContentLabel(contentType)}
             </Text>
-            <Pressable onPress={handleOptionsPress} style={styles.optionsButton}>
-              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textTertiary} />
-            </Pressable>
           </View>
-
-          <Text
-            style={[styles.title, { color: colors.textPrimary }]}
-            numberOfLines={2}
-          >
-            {bookmark.title || bookmark.url || 'Untitled'}
-          </Text>
+          
+          <View style={styles.titleContainer}>
+            {contentType === 'voice' && (
+              <Pressable
+                style={[styles.miniPlayButton, { backgroundColor: colors.accent }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleVoicePlay();
+                }}
+              >
+                <Ionicons
+                  name={isPlaying ? "pause" : "play"}
+                  size={14}
+                  color="#fff"
+                />
+              </Pressable>
+            )}
+            <Text
+              style={[styles.title, { color: colors.textPrimary }]}
+              numberOfLines={2}
+            >
+              {bookmark.title || bookmark.url || 'Untitled'}
+            </Text>
+          </View>
 
           {tags.length > 0 && contentType !== 'voice' && (
             <View style={[styles.tags, { gap: spacing.xs }]}>
@@ -400,11 +365,23 @@ const styles = StyleSheet.create({
   optionsButton: {
     padding: 2,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  miniPlayButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
     fontSize: 14,
     fontWeight: "500",
     lineHeight: 18,
-    marginBottom: 6,
+    flex: 1,
   },
   tags: {
     flexDirection: "row",

@@ -13,6 +13,7 @@ import { initDatabase } from "../lib/db";
 import { startSyncWorker } from "../lib/sync";
 import { isOnboardingComplete } from "../lib/user";
 import { useAuthStore } from "../stores/useAuthStore";
+import AudioPlayerModal from "../components/AudioPlayerModal";
 import "../global.css";
 
 export default function RootLayout() {
@@ -98,6 +99,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           )}
         </Stack>
+        <AudioPlayerModal />
       </SafeAreaView>
     </>
   );

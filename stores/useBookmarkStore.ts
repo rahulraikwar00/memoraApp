@@ -8,6 +8,7 @@ interface BookmarkState {
   searchQuery: string;
   loadBookmarks: () => Promise<void>;
   addBookmark: (data: Omit<Bookmark, 'id' | 'created_at' | 'updated_at' | 'synced_at' | 'is_deleted' | 'is_favorite'>) => Promise<Bookmark | null>;
+  updateBookmark: (id: string, data: Partial<Omit<Bookmark, 'id' | 'created_at'>>) => Promise<void>;
   removeBookmark: (id: string) => Promise<void>;
   togglePublic: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
@@ -48,6 +49,20 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       console.error('Add bookmark error:', err);
       set({ error: (err as Error).message, isLoading: false });
       return null;
+    }
+  },
+
+  updateBookmark: async (id, data) => {
+    try {
+      const { updateBookmark: dbUpdateBookmark, getBookmarkById } = await import('../lib/db');
+      await dbUpdateBookmark(id, data);
+      const updated = await getBookmarkById(id);
+      if (updated) {
+        const { bookmarks } = get();
+        set({ bookmarks: bookmarks.map(b => b.id === id ? updated : b) });
+      }
+    } catch (err) {
+      set({ error: (err as Error).message });
     }
   },
 

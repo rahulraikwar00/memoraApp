@@ -7,10 +7,14 @@ import {
   Pressable,
   ScrollView,
   Alert,
-  Clipboard,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useBookmarkStore } from "../stores/useBookmarkStore";
 import { Bookmark } from "../lib/db";
 import TagChip from "./TagChip";
 
@@ -52,12 +56,43 @@ export default function NoteReaderModal({
   onDelete,
 }: NoteReaderModalProps) {
   const { colors, spacing } = useThemeStore();
+  const updateBookmark = useBookmarkStore((state) => state.updateBookmark);
+
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editedTitle, setEditedTitle] = React.useState(bookmark.title || "");
+  const [editedText, setEditedText] = React.useState(bookmark.description || "");
+
+  React.useEffect(() => {
+    if (visible) {
+      setEditedTitle(bookmark.title || "");
+      setEditedText(bookmark.description || "");
+      setIsEditing(false);
+    }
+  }, [visible, bookmark]);
+
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
-  const noteText = bookmark.description || bookmark.title || "";
+  const displayText = bookmark.description || bookmark.title || "";
 
   const handleCopy = () => {
-    Clipboard.setString(noteText);
+    Clipboard.setStringAsync(editedText || displayText);
     Alert.alert("Copied", "Note copied to clipboard");
+  };
+
+  const handleSave = async () => {
+    if (!editedTitle.trim() && !editedText.trim()) {
+      Alert.alert("Error", "Title and content cannot both be empty");
+      return;
+    }
+
+    try {
+      await updateBookmark(bookmark.id, {
+        title: editedTitle.trim(),
+        description: editedText.trim(),
+      });
+      setIsEditing(false);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save note");
+    }
   };
 
   const handleDelete = () => {
@@ -90,102 +125,234 @@ export default function NoteReaderModal({
       onRequestClose={onClose}
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <Pressable onPress={onClose} style={styles.headerButton}>
-            <Ionicons name="close" size={24} color={colors.textPrimary} />
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.card,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <Pressable
+            onPress={isEditing ? () => setIsEditing(false) : onClose}
+            style={styles.headerButton}
+          >
+            <Ionicons
+              name={isEditing ? "arrow-back" : "close"}
+              size={24}
+              color={colors.textPrimary}
+            />
           </Pressable>
-          
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            Note
+
+          <Text
+            style={[styles.headerTitle, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {isEditing ? "Edit Note" : "Note"}
           </Text>
-          
+
           <View style={styles.headerActions}>
-            {onShare && (
-              <Pressable onPress={onShare} style={styles.headerButton}>
-                <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+            {isEditing ? (
+              <Pressable
+                onPress={handleSave}
+                style={[styles.saveButton, { backgroundColor: colors.accent }]}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
               </Pressable>
+            ) : (
+              <>
+                {onShare && (
+                  <Pressable onPress={onShare} style={styles.headerButton}>
+                    <Ionicons
+                      name="share-outline"
+                      size={22}
+                      color={colors.textPrimary}
+                    />
+                  </Pressable>
+                )}
+                <Pressable onPress={handleCopy} style={styles.headerButton}>
+                  <Ionicons
+                    name="copy-outline"
+                    size={22}
+                    color={colors.textPrimary}
+                  />
+                </Pressable>
+              </>
             )}
-            <Pressable onPress={handleCopy} style={styles.headerButton}>
-              <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
+          </View>
+        </View>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={[
+              styles.contentContainer,
+              { padding: spacing.lg },
+            ]}
+          >
+            {isEditing ? (
+              <View style={styles.editForm}>
+                <TextInput
+                  style={[
+                    styles.titleInput,
+                    {
+                      color: colors.textPrimary,
+                      borderBottomColor: colors.border,
+                    },
+                  ]}
+                  value={editedTitle}
+                  onChangeText={setEditedTitle}
+                  placeholder="Title"
+                  placeholderTextColor={colors.textTertiary}
+                  autoFocus
+                />
+                <TextInput
+                  style={[styles.textInput, { color: colors.textPrimary }]}
+                  value={editedText}
+                  onChangeText={setEditedText}
+                  placeholder="Start writing..."
+                  placeholderTextColor={colors.textTertiary}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+            ) : (
+              <>
+                {bookmark.title && (
+                  <Text
+                    style={[styles.noteTitle, { color: colors.textPrimary }]}
+                  >
+                    {bookmark.title}
+                  </Text>
+                )}
+
+                <Text style={[styles.noteText, { color: colors.textPrimary }]}>
+                  {displayText}
+                </Text>
+
+                {tags.length > 0 && (
+                  <View style={[styles.tagsContainer, { gap: spacing.xs }]}>
+                    {tags.map((tag, index) => (
+                      <TagChip key={index} tag={tag} />
+                    ))}
+                  </View>
+                )}
+
+                <View
+                  style={[styles.metadata, { borderTopColor: colors.border }]}
+                >
+                  <View style={styles.metadataItem}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={16}
+                      color={colors.textTertiary}
+                    />
+                    <Text
+                      style={[
+                        styles.metadataText,
+                        { color: colors.textTertiary },
+                      ]}
+                    >
+                      {getRelativeTime(bookmark.created_at)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.metadataItem}>
+                    <Ionicons
+                      name={
+                        bookmark.is_public
+                          ? "globe-outline"
+                          : "lock-closed-outline"
+                      }
+                      size={16}
+                      color={colors.textTertiary}
+                    />
+                    <Text
+                      style={[
+                        styles.metadataText,
+                        { color: colors.textTertiary },
+                      ]}
+                    >
+                      {bookmark.is_public ? "Public" : "Private"}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {!isEditing && (
+          <View
+            style={[
+              styles.toolbar,
+              { backgroundColor: colors.card, borderTopColor: colors.border },
+            ]}
+          >
+            <Pressable
+              style={styles.toolbarButton}
+              onPress={() => setIsEditing(true)}
+            >
+              <Ionicons
+                name="create-outline"
+                size={22}
+                color={colors.textPrimary}
+              />
+              <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+                Edit
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.toolbarButton} onPress={onShare}>
+              <Ionicons
+                name="share-outline"
+                size={22}
+                color={colors.textPrimary}
+              />
+              <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+                Share
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.toolbarButton} onPress={handleCopy}>
+              <Ionicons
+                name="copy-outline"
+                size={22}
+                color={colors.textPrimary}
+              />
+              <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+                Copy
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.toolbarButton}
+              onPress={handleTogglePublic}
+            >
+              <Ionicons
+                name={
+                  bookmark.is_public ? "lock-closed-outline" : "globe-outline"
+                }
+                size={22}
+                color={colors.textPrimary}
+              />
+              <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
+                {bookmark.is_public ? "Private" : "Public"}
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.toolbarButton} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={22} color={colors.danger} />
+              <Text style={[styles.toolbarText, { color: colors.danger }]}>
+                Delete
+              </Text>
             </Pressable>
           </View>
-        </View>
-
-        <ScrollView 
-          style={styles.content}
-          contentContainerStyle={[styles.contentContainer, { padding: spacing.lg }]}
-        >
-          {bookmark.title && (
-            <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>
-              {bookmark.title}
-            </Text>
-          )}
-          
-          <Text style={[styles.noteText, { color: colors.textPrimary }]}>
-            {noteText}
-          </Text>
-
-          {tags.length > 0 && (
-            <View style={[styles.tagsContainer, { gap: spacing.xs }]}>
-              {tags.map((tag, index) => (
-                <TagChip key={index} tag={tag} />
-              ))}
-            </View>
-          )}
-
-          <View style={[styles.metadata, { borderTopColor: colors.border }]}>
-            <View style={styles.metadataItem}>
-              <Ionicons name="calendar-outline" size={16} color={colors.textTertiary} />
-              <Text style={[styles.metadataText, { color: colors.textTertiary }]}>
-                {getRelativeTime(bookmark.created_at)}
-              </Text>
-            </View>
-            
-            <View style={styles.metadataItem}>
-              <Ionicons 
-                name={bookmark.is_public ? "globe-outline" : "lock-closed-outline"} 
-                size={16} 
-                color={colors.textTertiary} 
-              />
-              <Text style={[styles.metadataText, { color: colors.textTertiary }]}>
-                {bookmark.is_public ? "Public" : "Private"}
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={[styles.toolbar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <Pressable style={styles.toolbarButton} onPress={onEdit}>
-            <Ionicons name="create-outline" size={22} color={colors.textPrimary} />
-            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Edit</Text>
-          </Pressable>
-          
-          <Pressable style={styles.toolbarButton} onPress={onShare}>
-            <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
-            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Share</Text>
-          </Pressable>
-          
-          <Pressable style={styles.toolbarButton} onPress={handleCopy}>
-            <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
-            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>Copy</Text>
-          </Pressable>
-          
-          <Pressable style={styles.toolbarButton} onPress={handleTogglePublic}>
-            <Ionicons 
-              name={bookmark.is_public ? "lock-closed-outline" : "globe-outline"} 
-              size={22} 
-              color={colors.textPrimary} 
-            />
-            <Text style={[styles.toolbarText, { color: colors.textPrimary }]}>
-              {bookmark.is_public ? "Private" : "Public"}
-            </Text>
-          </Pressable>
-          
-          <Pressable style={styles.toolbarButton} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={22} color={colors.danger} />
-            <Text style={[styles.toolbarText, { color: colors.danger }]}>Delete</Text>
-          </Pressable>
-        </View>
+        )}
       </View>
     </Modal>
   );
@@ -214,13 +381,41 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 4,
+  },
+  saveButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
   content: {
     flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
+  },
+  editForm: {
+    flex: 1,
+  },
+  titleInput: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  textInput: {
+    fontSize: 16,
+    lineHeight: 26,
+    flex: 1,
+    paddingTop: 8,
   },
   noteTitle: {
     fontSize: 24,

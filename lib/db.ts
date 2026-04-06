@@ -411,6 +411,7 @@ export async function updateUserTags(tags: string): Promise<void> {
   const now = Date.now();
 
   for (const tag of tagsArray) {
+    if (!tag) continue;
     const normalizedTag = tag.toLowerCase().trim();
     if (!normalizedTag) continue;
 
@@ -441,8 +442,8 @@ export async function getDiscoverFeed(userTags: string[]): Promise<Bookmark[]> {
     );
   }
 
-  const placeholders = userTags.map(() => `LOWER(tags) LIKE ?`).join(" OR ");
-  const params = userTags.map((tag) => `%${tag.toLowerCase()}%`);
+  const placeholders = userTags.filter(Boolean).map(() => `LOWER(tags) LIKE ?`).join(" OR ");
+  const params = userTags.filter(Boolean).map((tag) => `%${tag.toLowerCase()}%`);
 
   return database.getAllAsync<Bookmark>(
     `SELECT * FROM bookmarks 
