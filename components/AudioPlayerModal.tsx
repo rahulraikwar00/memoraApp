@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useCallback, memo } from "react";
 import {
   Modal,
   View,
@@ -10,14 +10,54 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withTiming,
+  cancelAnimation,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
 import { useAudioStore } from "../stores/useAudioStore";
 import { Bookmark } from "../lib/db";
 import TagChip from "./TagChip";
+
+interface WaveformBarProps {
+  height: number;
+  isPlaying: boolean;
+  index: number;
+  color: string;
+}
+
+const WaveformBar = memo(function WaveformBar({
+  height,
+  isPlaying,
+  index,
+  color,
+}: WaveformBarProps) {
+  const animatedHeight = useSharedValue(0.2);
+
+  useEffect(() => {
+    if (isPlaying) {
+      animatedHeight.value = withTiming(height, {
+        duration: 300 + index * 50,
+      });
+    } else {
+      cancelAnimation(animatedHeight);
+      animatedHeight.value = withTiming(0.2, { duration: 200 });
+    }
+    return () => {
+      cancelAnimation(animatedHeight);
+    };
+  }, [isPlaying, height, index]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: `${animatedHeight.value * 100}%`,
+  }));
+
+  return (
+    <Animated.View
+      style={[styles.waveformBar, { backgroundColor: color }, animatedStyle]}
+    />
+  );
+});
 
 interface AudioPlayerModalProps {
   visible: boolean;
@@ -45,44 +85,6 @@ function getRelativeTime(timestamp: number): string {
   return "Just now";
 }
 
-const WaveformBar = ({
-  height,
-  isPlaying,
-  index,
-  color,
-}: {
-  height: number;
-  isPlaying: boolean;
-  index: number;
-  color: string;
-}) => {
-  const animatedHeight = useSharedValue(0.2);
-
-  useEffect(() => {
-    if (isPlaying) {
-      animatedHeight.value = withRepeat(
-        withTiming(height, {
-          duration: 300 + index * 50,
-        }),
-        -1,
-        true,
-      );
-    } else {
-      animatedHeight.value = withTiming(0.2, { duration: 200 });
-    }
-  }, [isPlaying, height, index]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    height: `${animatedHeight.value * 100}%`,
-  }));
-
-  return (
-    <Animated.View
-      style={[styles.waveformBar, { backgroundColor: color }, animatedStyle]}
-    />
-  );
-};
-
 export default function AudioPlayerModal({
   visible,
   bookmark,
@@ -90,11 +92,22 @@ export default function AudioPlayerModal({
   onDelete,
   onShowOptions,
 }: AudioPlayerModalProps) {
-  const { colors, spacing } = useThemeStore();
+  const colors = useThemeStore((state) => state.colors);
+  const spacing = useThemeStore((state) => state.spacing);
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
 
-  const { currentlyPlayingId, isPlaying: globalIsPlaying, play, pause, stop } = useAudioStore();
-  const isThisPlaying = currentlyPlayingId === bookmark.id && globalIsPlaying;
+  const currentlyPlayingId = useAudioStore((state) => state.currentlyPlayingId);
+  const isPlaying = useAudioStore((state) => state.isPlaying);
+  const position = useAudioStore((state) => state.position);
+  const duration = useAudioStore((state) => state.duration);
+  const play = useAudioStore((state) => state.play);
+  const pause = useAudioStore((state) => state.pause);
+  const stop = useAudioStore((state) => state.stop);
+
+  const isThisPlaying = currentlyPlayingId === bookmark.id && isPlaying;
+
+  const formattedPosition = currentlyPlayingId === bookmark.id ? position : 0;
+  const formattedDuration = currentlyPlayingId === bookmark.id ? duration : 0;
 
   useEffect(() => {
     return () => {
@@ -104,25 +117,21 @@ export default function AudioPlayerModal({
     };
   }, [currentlyPlayingId, bookmark.id, stop]);
 
-  const [duration, setDuration] = useState<number | null>(null);
-  const [position, setPosition] = useState<number>(0);
-
   useEffect(() => {
     if (!visible) {
-      setPosition(0);
-      setDuration(null);
+      stop();
     }
   }, [visible]);
 
-  const formatTime = (ms: number | null) => {
+  const formatTime = useCallback((ms: number) => {
     if (!ms) return "0:00";
     const seconds = Math.floor(ms / 1000);
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+  }, []);
 
-  const handlePlayPause = async () => {
+  const handlePlayPause = useCallback(async () => {
     if (!bookmark.local_path) {
       Alert.alert("Error", "Audio file not found");
       return;
@@ -133,13 +142,13 @@ export default function AudioPlayerModal({
     } else {
       await play(bookmark.id, bookmark.local_path);
     }
-  };
+  }, [bookmark.id, bookmark.local_path, isThisPlaying, pause, play]);
 
-  const handleSeek = async (forward: boolean) => {
+  const handleSeek = useCallback(async (forward: boolean) => {
     Alert.alert("Seeking", "Seeking is not supported in grid view");
-  };
+  }, []);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     Alert.alert(
       "Delete Recording",
       "Are you sure you want to delete this voice recording?",
@@ -155,9 +164,9 @@ export default function AudioPlayerModal({
         },
       ]
     );
-  };
+  }, [onDelete, onClose]);
 
-  const progress = duration ? position / duration : 0;
+  const progress = formattedDuration ? formattedPosition / formattedDuration : 0;
 
   return (
     <Modal
@@ -204,10 +213,10 @@ export default function AudioPlayerModal({
 
           <View style={styles.timeContainer}>
             <Text style={[styles.time, { color: colors.textTertiary }]}>
-              {formatTime(position)}
+              {formatTime(formattedPosition)}
             </Text>
             <Text style={[styles.time, { color: colors.textTertiary }]}>
-              {formatTime(duration)}
+              {formatTime(formattedDuration)}
             </Text>
           </View>
 

@@ -4,6 +4,8 @@ import { Audio } from 'expo-av';
 interface AudioState {
   currentlyPlayingId: string | null;
   isPlaying: boolean;
+  position: number;
+  duration: number;
   soundRef: Audio.Sound | null;
   play: (bookmarkId: string, audioUri: string) => Promise<void>;
   pause: () => Promise<void>;
@@ -14,6 +16,8 @@ interface AudioState {
 export const useAudioStore = create<AudioState>((set, get) => ({
   currentlyPlayingId: null,
   isPlaying: false,
+  position: 0,
+  duration: 0,
   soundRef: null,
 
   play: async (bookmarkId: string, audioUri: string) => {
@@ -30,13 +34,22 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     }
 
     try {
+      set({ position: 0, duration: 0 });
+
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },
         (status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            set({ isPlaying: false, currentlyPlayingId: null });
-            sound.setPositionAsync(0);
+          if (status.isLoaded) {
+            if (status.didJustFinish) {
+              set({ isPlaying: false, currentlyPlayingId: null, position: 0 });
+              sound.setPositionAsync(0);
+            } else {
+              set({
+                position: status.positionMillis || 0,
+                duration: status.durationMillis || 0,
+              });
+            }
           }
         }
       );
@@ -51,8 +64,12 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   pause: async () => {
     const { soundRef } = get();
     if (soundRef) {
+      const status = await soundRef.getStatusAsync();
       await soundRef.pauseAsync();
-      set({ isPlaying: false });
+      set({ 
+        isPlaying: false,
+        position: status.isLoaded ? status.positionMillis || 0 : 0,
+      });
     }
   },
 
@@ -69,7 +86,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     if (soundRef) {
       await soundRef.stopAsync();
       await soundRef.unloadAsync();
-      set({ soundRef: null, currentlyPlayingId: null, isPlaying: false });
+      set({ soundRef: null, currentlyPlayingId: null, isPlaying: false, position: 0, duration: 0 });
     }
   },
 

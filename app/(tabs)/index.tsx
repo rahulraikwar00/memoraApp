@@ -1,125 +1,106 @@
-import { useCallback, useState } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Linking, Clipboard, Text, ScrollView, Pressable } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { useBookmarkStore } from '../../stores/useBookmarkStore';
-import { useThemeStore } from '../../stores/useThemeStore';
-import { useAudioStore } from '../../stores/useAudioStore';
-import GridBookmarkCard from '../../components/GridBookmarkCard';
-import EmptyState from '../../components/EmptyState';
-import SkeletonCard from '../../components/SkeletonCard';
-import { Bookmark } from '../../lib/db';
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import EmptyState from "../../components/EmptyState";
+import GridBookmarkCard from "../../components/GridBookmarkCard";
+import SearchBar from "../../components/SearchBar";
+import { Bookmark } from "../../lib/db";
+import { ContentType, filterBookmarks } from "../../lib/filter";
+import { useAudioStore } from "../../stores/useAudioStore";
+import { useBookmarkStore } from "../../stores/useBookmarkStore";
+import { useThemeStore } from "../../stores/useThemeStore";
 
-export default function LibraryScreen() {
-  const { bookmarks, isLoading, loadBookmarks, removeBookmark, togglePublic, performSearch } = useBookmarkStore();
-  const { colors, spacing } = useThemeStore();
+const TYPE_FILTERS = [
+  { key: "all", label: "All", icon: "apps" },
+  { key: "link", label: "Links", icon: "link" },
+  { key: "image", label: "Images", icon: "image" },
+  { key: "note", label: "Notes", icon: "document-text" },
+  { key: "voice", label: "Voice", icon: "mic" },
+];
+
+const TAG_FILTERS = ["Dev", "Design", "Video", "Article", "Research"];
+
+export default function SearchScreen() {
+  const { bookmarks, performSearch } = useBookmarkStore();
+  const { colors, spacing, typography, borderRadius } = useThemeStore();
   const { stop } = useAudioStore();
-
-  const [selectedCategory, setSelectedCategory] = useState('All');
-
-  const categories = ['All', 'Link', 'Image', 'Note', 'Voice', 'AI', 'Art'];
+  const [query, setQuery] = useState("");
+  const [activeTypeFilter, setActiveTypeFilter] = useState("all");
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      loadBookmarks();
       return () => {
+        console.log("Search screen unfocused, stopping audio");
         stop();
       };
-    }, [loadBookmarks, stop])
+    }, [stop]),
   );
 
-  const handleCategoryPress = (category: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedCategory(category);
-    if (category === 'All') {
-      performSearch('');
-    } else {
-      performSearch(category.toLowerCase());
-    }
-  };
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      performSearch(query);
+    }, 150);
+    return () => clearTimeout(debounceTimer);
+  }, [query, performSearch]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    await removeBookmark(id);
-  }, [removeBookmark]);
-
-  const handleTogglePublic = useCallback(async (id: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await togglePublic(id);
-  }, [togglePublic]);
-
-  const handleOpenLink = useCallback(async (url: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL(url);
+  const handleTypeFilterChange = useCallback((filter: string) => {
+    setActiveTypeFilter(filter);
   }, []);
 
-  const handleShare = useCallback(async (bookmark: Bookmark) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Clipboard.setString(bookmark.url);
-    Alert.alert('Copied', 'Link copied to clipboard');
+  const handleTagFilterChange = useCallback((filter: string | null) => {
+    setActiveTagFilter((prev) => (prev === filter ? null : filter));
   }, []);
 
-  const handleCopyUrl = useCallback((url: string) => {
-    Clipboard.setString(url);
-    Alert.alert('Copied', 'URL copied to clipboard');
-  }, []);
+  const filteredBookmarks = useMemo(() => {
+    return filterBookmarks(bookmarks, {
+      typeFilter: activeTypeFilter as ContentType | "all",
+      tagFilter: activeTagFilter,
+    });
+  }, [bookmarks, activeTypeFilter, activeTagFilter]);
 
-  const renderItem = useCallback(({ item }: { item: Bookmark }) => {
-    return (
-      <GridBookmarkCard
-        bookmark={item}
-        onOpenLink={() => handleOpenLink(item.url)}
-        onTogglePublic={() => handleTogglePublic(item.id)}
-        onEdit={() => {/* Logic for edit if needed */}}
-        onShare={() => handleShare(item)}
-        onCopyUrl={() => handleCopyUrl(item.url)}
-        onDelete={() => handleDelete(item.id)}
-      />
-    );
-  }, [handleOpenLink, handleTogglePublic, handleShare, handleCopyUrl, handleDelete]);
-
-  const renderSkeleton = () => (
-    <View style={styles.skeletonContainer}>
-      <SkeletonCard hasImage />
-      <SkeletonCard hasImage />
-    </View>
-  );
-
-  const renderHeader = () => (
-    <View style={[styles.headerContainer, { paddingHorizontal: spacing.lg }]}>
-      <View style={styles.topRow}>
-        <Pressable style={styles.iconContainer}>
-          <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>Captures</Text>
-        <View style={{ width: 22 }} />
-      </View>
-
+  const renderTagFilters = () => (
+    <View
+      style={[
+        styles.tagFilterContainer,
+        { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+      ]}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.categoryChips, { paddingVertical: spacing.md }]}
+        contentContainerStyle={[styles.tagFilterRow, { gap: spacing.sm }]}
       >
-        {categories.map((cat) => (
+        {TAG_FILTERS.map((filter) => (
           <Pressable
-            key={cat}
-            onPress={() => handleCategoryPress(cat)}
+            key={filter}
             style={[
-              styles.chip,
+              styles.tagChip,
               {
-                backgroundColor: selectedCategory === cat ? colors.accent : colors.elevated,
-                marginRight: spacing.sm,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: borderRadius.pill,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.sm,
+              },
+              activeTagFilter === filter && {
+                backgroundColor: colors.accentLight + "30",
+                borderColor: colors.accent,
               },
             ]}
+            onPress={() => handleTagFilterChange(filter)}
           >
             <Text
               style={[
-                styles.chipText,
-                { color: selectedCategory === cat ? '#fff' : colors.textSecondary },
+                styles.tagText,
+                { color: colors.textSecondary },
+                activeTagFilter === filter && {
+                  color: colors.accent,
+                  fontWeight: "600",
+                },
               ]}
             >
-              {cat}
+              {filter}
             </Text>
           </Pressable>
         ))}
@@ -127,44 +108,86 @@ export default function LibraryScreen() {
     </View>
   );
 
-  if (isLoading && bookmarks.length === 0) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderHeader()}
-        <View style={[styles.list, { padding: spacing.lg }]}>
-          {renderSkeleton()}
-        </View>
-      </View>
-    );
-  }
+  const renderItem = useCallback(
+    ({ item }: { item: Bookmark }) => <GridBookmarkCard bookmark={item} />,
+    [],
+  );
+
+  const renderHeader = () => (
+    <View
+      style={[
+        styles.header,
+        { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+      ]}
+    >
+      <Text
+        style={[
+          styles.title,
+          {
+            color: colors.textPrimary,
+            marginBottom: spacing.xs,
+            ...typography.hero,
+          },
+        ]}
+      >
+        Search
+      </Text>
+      <Text
+        style={[
+          styles.subtitle,
+          { color: colors.textSecondary, ...typography.body },
+        ]}
+      >
+        Find your saved bookmarks
+      </Text>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.searchWrapper,
+          {
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.md,
+            paddingBottom: spacing.sm,
+          },
+        ]}
+      >
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search by title, tags, domain..."
+          autoFocus={false}
+          activeFilter={activeTypeFilter}
+          onFilterChange={handleTypeFilterChange}
+        />
+      </View>
+
+      {renderTagFilters()}
+
       <FlatList
-        data={bookmarks}
+        data={filteredBookmarks}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        ListHeaderComponent={renderHeader}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={[
           styles.list,
           { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
-          bookmarks.length === 0 && styles.emptyList
+          filteredBookmarks.length === 0 && styles.emptyList,
         ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={loadBookmarks}
-            tintColor={colors.accent}
-            colors={[colors.accent]}
-          />
-        }
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <EmptyState
-            icon="bookmark-outline"
-            title="No bookmarks yet"
-            message="Save your first link from the Save tab to get started"
+            icon="search-outline"
+            title={query ? "No results found" : "Search your bookmarks"}
+            message={
+              query
+                ? `No bookmarks match "${query}"`
+                : "Type to search your saved bookmarks"
+            }
           />
         }
         showsVerticalScrollIndicator={false}
@@ -176,48 +199,35 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
   },
-  headerContainer: {
-    paddingBottom: 4,
+  searchWrapper: {},
+  header: {},
+  filterContainer: {},
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+  filterChip: {
+    borderWidth: 1,
   },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+  filterText: {},
+  filterTextActive: {},
+  tagFilterContainer: {},
+  tagFilterRow: {
+    flexDirection: "row",
+    // flexWrap: 'wrap',
   },
-  iconContainer: {
-    padding: 4,
+  tagChip: {
+    borderWidth: 1,
   },
-  categoryChips: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  chipText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  tagText: {},
   list: {},
   columnWrapper: {
-    gap: 12,
-    marginBottom: 12,
+    gap: 8,
   },
   emptyList: {
-    flex: 1,
+    flexGrow: 1,
   },
-  skeletonContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
+  title: {},
+  subtitle: {},
 });
