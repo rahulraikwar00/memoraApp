@@ -28,7 +28,8 @@ interface GridBookmarkCardProps {
   onDelete?: () => void;
   onVote?: () => void;
   onVoicePlay?: (bookmark: Bookmark) => void;
-  onLongPress?: () => void;
+  onLongPress?: (event?: any) => void;
+  onLayout?: (event: any) => void;
   isVoted?: boolean;
   variant?: "feed" | "default";
   onUpvote?: () => void;
@@ -37,6 +38,7 @@ interface GridBookmarkCardProps {
   isUpvoted?: boolean;
   isSaved?: boolean;
   saveCount?: number;
+  showShareInHeader?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -64,6 +66,7 @@ export default function GridBookmarkCard({
   onVote,
   onVoicePlay,
   onLongPress,
+  onLayout,
   isVoted,
   variant = "default",
   onUpvote,
@@ -72,6 +75,7 @@ export default function GridBookmarkCard({
   isUpvoted,
   isSaved,
   saveCount,
+  showShareInHeader,
 }: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
   const CARD_WIDTH =
@@ -134,10 +138,10 @@ export default function GridBookmarkCard({
     }
   };
 
-  const handleLongPress = () => {
+  const handleLongPress = (event?: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (onLongPress) {
-      onLongPress();
+      onLongPress(event);
     } else {
       setShowOptionsModal(true);
     }
@@ -215,6 +219,7 @@ export default function GridBookmarkCard({
         onLongPress={handleLongPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        onLayout={onLayout}
         accessibilityLabel={`Bookmark: ${bookmark.title || bookmark.url}`}
       >
         {renderPreview()}
@@ -241,6 +246,22 @@ export default function GridBookmarkCard({
             >
               {contentType === 'link' ? domain : getContentLabel(contentType)}
             </Text>
+            {variant === 'feed' && showShareInHeader && onShare && (
+              <Pressable
+                style={styles.headerShareButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onShare();
+                }}
+              >
+                <Ionicons
+                  name="share-outline"
+                  size={16}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+            )}
           </View>
           
           <View style={styles.titleContainer}>
@@ -276,50 +297,37 @@ export default function GridBookmarkCard({
           )}
 
           {variant === 'feed' && (
-            <View style={styles.feedActions}>
-              <View style={styles.quickActionsRow}>
+            <View style={styles.feedFooter}>
+              <View style={styles.saveCountContainer}>
+                <Ionicons
+                  name="bookmark-outline"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text style={[styles.saveCountText, { color: colors.textSecondary }]}>
+                  {saveCount || 0}
+                </Text>
+              </View>
+
+              {onSave && (
                 <Pressable
-                  style={[styles.saveButtonLarge, { 
+                  style={[styles.saveButton, {
                     backgroundColor: isSaved ? colors.accent : colors.card,
                     borderColor: isSaved ? colors.accent : colors.border,
                   }]}
                   onPress={(e) => {
                     e.stopPropagation();
                     Haptics.notificationAsync(isSaved ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success);
-                    onSave?.();
+                    onSave();
                   }}
                 >
                   <Ionicons
                     name={isSaved ? "bookmark" : "bookmark-outline"}
-                    size={18}
+                    size={16}
                     color={isSaved ? '#fff' : colors.textPrimary}
                   />
-                  <Text style={[styles.saveButtonTextLarge, { color: isSaved ? '#fff' : colors.textPrimary }]}>
-                    {isSaved ? 'Saved' : 'Save'}
-                  </Text>
                 </Pressable>
-
-                <Pressable
-                  style={[styles.shareButtonLarge, { 
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                  }]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    onShare?.();
-                  }}
-                >
-                  <Ionicons
-                    name="share-outline"
-                    size={18}
-                    color={colors.textPrimary}
-                  />
-                  <Text style={[styles.shareButtonTextLarge, { color: colors.textPrimary }]}>
-                    Share
-                  </Text>
-                </Pressable>
-              </View>
+              )}
             </View>
           )}
         </View>
@@ -368,72 +376,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 160,
   },
-  feedActions: {
-    marginTop: 10,
-    gap: 8,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  saveButtonLarge: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  saveButtonTextLarge: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  shareButtonLarge: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  shareButtonTextLarge: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secondaryActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  iconAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    padding: 6,
-    borderRadius: 8,
-  },
-  actionLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
   voicePreview: {
     flexDirection: "row",
     alignItems: "center",
@@ -472,6 +414,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     marginBottom: 4,
+  },
+  headerShareButton: {
+    padding: 4,
+    borderRadius: 6,
   },
   favicon: {
     width: 14,
@@ -514,6 +460,32 @@ const styles = StyleSheet.create({
   tags: {
     flexDirection: "row",
     flexWrap: "wrap",
+  },
+  feedFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.05)",
+  },
+  saveCountContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  saveCountText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  saveButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
   voteButton: {
     padding: 2,

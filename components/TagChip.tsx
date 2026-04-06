@@ -1,6 +1,6 @@
-import React from 'react';
-import { Text, StyleSheet } from 'react-native';
-import { colors, spacing, typography, borderRadius } from '../constants/theme';
+import React from "react";
+import { StyleSheet, Text } from "react-native";
+import { borderRadius, colors, spacing, typography } from "../constants/theme";
 
 interface TagChipProps {
   tag: string;
@@ -10,12 +10,8 @@ interface TagChipProps {
 
 export default function TagChip({ tag, small, light }: TagChipProps) {
   return (
-    <Text 
-      style={[
-        styles.tag, 
-        small && styles.tagSmall,
-        light && styles.tagLight
-      ]}
+    <Text
+      style={[styles.tag, small && styles.tagSmall, light && styles.tagLight]}
     >
       #{tag}
     </Text>
@@ -26,11 +22,11 @@ const styles = StyleSheet.create({
   tag: {
     ...typography.caption,
     color: colors.accent,
-    backgroundColor: 'rgba(108, 99, 255, 0.15)',
+    // backgroundColor: "rgba(108, 99, 255, 0.15)",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.pill,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   tagSmall: {
     fontSize: 10,
@@ -38,7 +34,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   tagLight: {
-    color: '#fff',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    color: "#fff",
+    // backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
 });

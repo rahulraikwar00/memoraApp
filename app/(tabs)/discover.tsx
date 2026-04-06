@@ -109,6 +109,8 @@ export default function DiscoverScreen() {
       onSave={() => handleSave(item)}
       isSaved={savedIds.has(item.id)}
       onShare={() => handleShare(item)}
+      saveCount={item.save_count}
+      showShareInHeader={true}
     />
   );
 

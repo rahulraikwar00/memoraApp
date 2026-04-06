@@ -1,170 +1,254 @@
-import Database, { type Database as SQLiteDatabase } from "better-sqlite3";
 import path from "path";
+import { db } from "./drizzle.js";
 import {
   DatabaseProvider,
   UpsertBookmarkParams,
   BookmarkRow,
   UserRow,
 } from "./provider.js";
+import { eq, and, desc, sql, inArray, lt } from "drizzle-orm";
+import * as schema from "./schema.js";
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+const {
+  users,
+  bookmarks,
+  userBookmarks,
+  bookmarkTags,
+  globalTags,
+  userTags,
+  votes,
+  userVotes,
+  reports,
+} = schema;
 
+// ──── Bootstrap ───────────────────────────────────────────────────────────────
+
+// Initialize tables (Drizzle will not auto create, keep init for compatibility)
+import type { Database } from "better-sqlite3";
+import DatabaseConstructor from "better-sqlite3";
 const dbPath = path.resolve(process.cwd(), "database.db");
-const db: SQLiteDatabase = new Database(dbPath);
+const rawDb = new DatabaseConstructor(dbPath) as Database;
 
-// Schema
-db.exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, avatar_url TEXT, created_at INTEGER NOT NULL)`);
-db.exec(`CREATE TABLE IF NOT EXISTS bookmarks (id TEXT PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT, save_count INTEGER DEFAULT 0, reports_count INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`);
-try {
-  db.exec(`ALTER TABLE bookmarks ADD COLUMN image_url TEXT`);
-} catch {} // Ignore if column already exists
-try {
-  db.exec(`ALTER TABLE bookmarks ADD COLUMN domain TEXT`);
-} catch {} // Ignore if column already exists
-try {
-  db.exec(`ALTER TABLE bookmarks ADD COLUMN reports_count INTEGER DEFAULT 0`);
-} catch {} // Ignore if column already exists
-db.exec(`CREATE TABLE IF NOT EXISTS user_bookmarks (user_id TEXT, bookmark_id TEXT, PRIMARY KEY(user_id, bookmark_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id))`);
-db.exec(`CREATE TABLE IF NOT EXISTS bookmark_tags (bookmark_id TEXT, tag TEXT, PRIMARY KEY(bookmark_id, tag), FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id))`);
-db.exec(`CREATE INDEX IF NOT EXISTS idx_bookmark_tags_tag ON bookmark_tags(tag)`);
-db.exec(`CREATE TABLE IF NOT EXISTS global_tags (tag TEXT PRIMARY KEY, count INTEGER DEFAULT 1)`);
-db.exec(`CREATE TABLE IF NOT EXISTS user_tags (user_id TEXT, tag TEXT, count INTEGER DEFAULT 1, PRIMARY KEY(user_id, tag), FOREIGN KEY(user_id) REFERENCES users(id))`);
-db.exec(`CREATE TABLE IF NOT EXISTS votes (item_id TEXT PRIMARY KEY, count INTEGER DEFAULT 0)`);
-db.exec(`CREATE TABLE IF NOT EXISTS user_votes (user_id TEXT, item_id TEXT, PRIMARY KEY(user_id, item_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(item_id) REFERENCES bookmarks(id))`);
-db.exec(`CREATE TABLE IF NOT EXISTS reports (item_id TEXT, reason TEXT, created_at INTEGER, PRIMARY KEY(item_id, reason), FOREIGN KEY(item_id) REFERENCES bookmarks(id))`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, avatar_url TEXT, created_at INTEGER NOT NULL)`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS bookmarks (id TEXT PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT, save_count INTEGER DEFAULT 0, reports_count INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`);
+try { rawDb.exec(`ALTER TABLE bookmarks ADD COLUMN image_url TEXT`); } catch {}
+try { rawDb.exec(`ALTER TABLE bookmarks ADD COLUMN domain TEXT`); } catch {}
+try { rawDb.exec(`ALTER TABLE bookmarks ADD COLUMN reports_count INTEGER DEFAULT 0`); } catch {}
+rawDb.exec(`CREATE TABLE IF NOT EXISTS user_bookmarks (user_id TEXT, bookmark_id TEXT, PRIMARY KEY(user_id, bookmark_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id))`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS bookmark_tags (bookmark_id TEXT, tag TEXT, PRIMARY KEY(bookmark_id, tag), FOREIGN KEY(bookmark_id) REFERENCES bookmarks(id))`);
+rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_bookmark_tags_tag ON bookmark_tags(tag)`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS global_tags (tag TEXT PRIMARY KEY, count INTEGER DEFAULT 1)`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS user_tags (user_id TEXT, tag TEXT, count INTEGER DEFAULT 1, PRIMARY KEY(user_id, tag), FOREIGN KEY(user_id) REFERENCES users(id))`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS votes (item_id TEXT PRIMARY KEY, count INTEGER DEFAULT 0)`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS user_votes (user_id TEXT, item_id TEXT, PRIMARY KEY(user_id, item_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(item_id) REFERENCES bookmarks(id))`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS reports (item_id TEXT, reason TEXT, created_at INTEGER, PRIMARY KEY(item_id, reason), FOREIGN KEY(item_id) REFERENCES bookmarks(id))`);
 
-// ── Prepared statements (cached for performance) ────────────────────────────
+// ──── Query Helpers ───────────────────────────────────────────────────────────
 
-const stmts = {
-  getUserById: db.prepare("SELECT * FROM users WHERE id = ?"),
-  getUserByUsername: db.prepare("SELECT * FROM users WHERE username = ?"),
-  registerUser: db.prepare("INSERT INTO users (id, username, avatar_url, created_at) VALUES (?, ?, ?, ?)"),
+const withTags = db
+  .select({
+    id: bookmarks.id,
+    url: bookmarks.url,
+    title: bookmarks.title,
+    description: bookmarks.description,
+    image_url: bookmarks.imageUrl,
+    domain: bookmarks.domain,
+    save_count: bookmarks.saveCount,
+    reports_count: bookmarks.reportsCount,
+    created_at: bookmarks.createdAt,
+    tags: sql<string>`COALESCE(json_group_array(${bookmarkTags.tag}), '[]')`.as('tags')
+  })
+  .from(bookmarks)
+  .leftJoin(bookmarkTags, eq(bookmarks.id, bookmarkTags.bookmarkId))
+  .where(lt(bookmarks.reportsCount, 3))
+  .groupBy(bookmarks.id)
+  .as('with_tags');
 
-  upsertBookmark: db.prepare(`
-    INSERT INTO bookmarks (id, url, title, description, image_url, domain, save_count, reports_count, created_at) 
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
-    ON CONFLICT(id) DO UPDATE SET 
-      title = COALESCE(excluded.title, bookmarks.title), 
-      description = COALESCE(excluded.description, bookmarks.description),
-      image_url = COALESCE(excluded.image_url, bookmarks.image_url),
-      domain = COALESCE(excluded.domain, bookmarks.domain)
-  `),
-  addUserBookmark: db.prepare("INSERT OR IGNORE INTO user_bookmarks (user_id, bookmark_id) VALUES (?, ?)"),
-  incrementSaveCount: db.prepare("UPDATE bookmarks SET save_count = save_count + 1 WHERE id = ?"),
-  incrementReportsCount: db.prepare("UPDATE bookmarks SET reports_count = reports_count + 1 WHERE id = ?"),
-
-  addBookmarkTag: db.prepare("INSERT OR IGNORE INTO bookmark_tags (bookmark_id, tag) VALUES (?, ?)"),
-  addGlobalTag: db.prepare("INSERT INTO global_tags (tag, count) VALUES (?, 1) ON CONFLICT(tag) DO UPDATE SET count = count + 1"),
-  addUserTag: db.prepare("INSERT INTO user_tags (user_id, tag, count) VALUES (?, ?, 1) ON CONFLICT(user_id, tag) DO UPDATE SET count = count + 1"),
-  getUserTopTags: db.prepare("SELECT tag FROM user_tags WHERE user_id = ? ORDER BY count DESC LIMIT ?"),
-
-  decrementSaveCount: db.prepare("UPDATE bookmarks SET save_count = MAX(0, save_count - 1) WHERE id = ?"),
-  addVoteRecord: db.prepare("INSERT OR IGNORE INTO user_votes (user_id, item_id) VALUES (?, ?)"),
-  removeVoteRecord: db.prepare("DELETE FROM user_votes WHERE user_id = ? AND item_id = ?"),
-  hasUserVoted: db.prepare("SELECT 1 FROM user_votes WHERE user_id = ? AND item_id = ?"),
-  vote: db.prepare("INSERT INTO votes (item_id, count) VALUES (?, 1) ON CONFLICT(item_id) DO UPDATE SET count = count + 1"),
-  decrementVoteCount: db.prepare("UPDATE votes SET count = MAX(0, count - 1) WHERE item_id = ?"),
-  reportItem: db.prepare("INSERT INTO reports (item_id, reason, created_at) VALUES (?, ?, ?) ON CONFLICT(item_id, reason) DO NOTHING"),
-};
-
-// ── Select helpers for feed ─────────────────────────────────────────────────
-
-const feedSelectBase = `
-  SELECT b.id, b.url, b.title, b.description, b.image_url, b.domain, b.save_count, b.reports_count, b.created_at,
-          COALESCE(json_group_array(bt.tag), '[]') as tags
-  FROM bookmarks b
-  LEFT JOIN bookmark_tags bt ON b.id = bt.bookmark_id
-`;
-const feedSelect = `${feedSelectBase} WHERE b.reports_count < 3`;
-const feedGroup = "GROUP BY b.id";
-
-// ── Provider implementation ─────────────────────────────────────────────────
+// ──── Provider Implementation ────────────────────────────────────────────────
 
 export class SqliteProvider implements DatabaseProvider {
   // Users
   getUserById(id: string): UserRow | undefined {
-    return stmts.getUserById.get(id) as UserRow | undefined;
+    return db.select().from(users).where(eq(users.id, id)).get() as UserRow | undefined;
   }
+
   getUserByUsername(username: string): UserRow | undefined {
-    return stmts.getUserByUsername.get(username) as UserRow | undefined;
+    return db.select().from(users).where(eq(users.username, username)).get() as UserRow | undefined;
   }
+
   checkUsernameAvailable(username: string): boolean {
     return !this.getUserByUsername(username);
   }
+
   registerUser(id: string, username: string, avatarUrl: string | null): void {
-    stmts.registerUser.run(id, username, avatarUrl, Date.now());
+    db.insert(users).values({
+      id,
+      username,
+      avatarUrl,
+      createdAt: Date.now()
+    }).run();
   }
 
   // Bookmarks
   upsertBookmark(p: UpsertBookmarkParams): void {
-    stmts.upsertBookmark.run(p.id, p.url, p.title, p.description, p.image_url, p.domain, p.createdAt);
+    db.insert(bookmarks)
+      .values({
+        id: p.id,
+        url: p.url,
+        title: p.title,
+        description: p.description,
+        imageUrl: p.image_url,
+        domain: p.domain,
+        saveCount: 0,
+        reportsCount: 0,
+        createdAt: p.createdAt
+      })
+      .onConflictDoUpdate({
+        target: bookmarks.id,
+        set: {
+          title: sql`COALESCE(excluded.title, bookmarks.title)`,
+          description: sql`COALESCE(excluded.description, bookmarks.description)`,
+          imageUrl: sql`COALESCE(excluded.image_url, bookmarks.image_url)`,
+          domain: sql`COALESCE(excluded.domain, bookmarks.domain)`
+        }
+      })
+      .run();
   }
+
   addUserBookmark(userId: string, bookmarkId: string): boolean {
-    const res = stmts.addUserBookmark.run(userId, bookmarkId);
+    const res = db.insert(userBookmarks)
+      .values({ userId, bookmarkId })
+      .onConflictDoNothing()
+      .run();
     return res.changes > 0;
   }
+
   incrementSaveCount(bookmarkId: string): void {
-    stmts.incrementSaveCount.run(bookmarkId);
+    db.update(bookmarks)
+      .set({ saveCount: sql`${bookmarks.saveCount} + 1` })
+      .where(eq(bookmarks.id, bookmarkId))
+      .run();
   }
 
   // Tags
   addBookmarkTag(bookmarkId: string, tag: string): void {
-    stmts.addBookmarkTag.run(bookmarkId, tag);
+    db.insert(bookmarkTags)
+      .values({ bookmarkId, tag })
+      .onConflictDoNothing()
+      .run();
   }
+
   addGlobalTag(tag: string): void {
-    stmts.addGlobalTag.run(tag);
+    db.insert(globalTags)
+      .values({ tag, count: 1 })
+      .onConflictDoUpdate({
+        target: globalTags.tag,
+        set: { count: sql`${globalTags.count} + 1` }
+      })
+      .run();
   }
+
   addUserTag(userId: string, tag: string): void {
-    stmts.addUserTag.run(userId, tag);
+    db.insert(userTags)
+      .values({ userId, tag, count: 1 })
+      .onConflictDoUpdate({
+        target: [userTags.userId, userTags.tag],
+        set: { count: sql`${userTags.count} + 1` }
+      })
+      .run();
   }
+
   getUserTopTags(userId: string, limit: number): { tag: string }[] {
-    return stmts.getUserTopTags.all(userId, limit) as { tag: string }[];
+    return db.select({ tag: userTags.tag })
+      .from(userTags)
+      .where(eq(userTags.userId, userId))
+      .orderBy(desc(userTags.count))
+      .limit(limit)
+      .all() as { tag: string }[];
   }
 
   // Feed
   getFeedByTags(tags: string[], limit: number): BookmarkRow[] {
-    const conditions = tags.map(() => "bt_filter.tag = ?").join(" OR ");
-    const sql = `
-      ${feedSelectBase}
-      INNER JOIN bookmark_tags bt_filter ON b.id = bt_filter.bookmark_id
-      WHERE b.reports_count < 3 AND (${conditions})
-      ${feedGroup}
-      ORDER BY b.save_count DESC LIMIT ?
-    `;
-    return db.prepare(sql).all(...tags, limit) as BookmarkRow[];
+    return db.select()
+      .from(withTags)
+      .innerJoin(bookmarkTags, eq(withTags.id, bookmarkTags.bookmarkId))
+      .where(inArray(bookmarkTags.tag, tags))
+      .orderBy(desc(withTags.save_count))
+      .limit(limit)
+      .all() as unknown as BookmarkRow[];
   }
+
   getFeedTrending(limit: number): BookmarkRow[] {
-    return db.prepare(`${feedSelect} ${feedGroup} ORDER BY b.save_count DESC LIMIT ?`).all(limit) as BookmarkRow[];
+    return db.select()
+      .from(withTags)
+      .orderBy(desc(withTags.save_count))
+      .limit(limit)
+      .all() as unknown as BookmarkRow[];
   }
+
   getFeedRecent(limit: number): BookmarkRow[] {
-    return db.prepare(`${feedSelect} ${feedGroup} ORDER BY b.created_at DESC LIMIT ?`).all(limit) as BookmarkRow[];
+    return db.select()
+      .from(withTags)
+      .orderBy(desc(withTags.created_at))
+      .limit(limit)
+      .all() as unknown as BookmarkRow[];
   }
 
   // Votes
   toggleVote(userId: string, itemId: string): void {
-    const hasVoted = stmts.hasUserVoted.get(userId, itemId);
+    const hasVoted = db.select()
+      .from(userVotes)
+      .where(and(eq(userVotes.userId, userId), eq(userVotes.itemId, itemId)))
+      .get();
+
     if (hasVoted) {
       // Unvote
-      stmts.removeVoteRecord.run(userId, itemId);
-      stmts.decrementVoteCount.run(itemId);
-      stmts.decrementSaveCount.run(itemId);
+      db.delete(userVotes)
+        .where(and(eq(userVotes.userId, userId), eq(userVotes.itemId, itemId)))
+        .run();
+      db.update(votes)
+        .set({ count: sql`MAX(0, ${votes.count} - 1)` })
+        .where(eq(votes.itemId, itemId))
+        .run();
+      db.update(bookmarks)
+        .set({ saveCount: sql`MAX(0, ${bookmarks.saveCount} - 1)` })
+        .where(eq(bookmarks.id, itemId))
+        .run();
     } else {
       // Vote
-      stmts.addVoteRecord.run(userId, itemId);
-      stmts.vote.run(itemId);
-      stmts.incrementSaveCount.run(itemId);
+      db.insert(userVotes)
+        .values({ userId, itemId })
+        .onConflictDoNothing()
+        .run();
+      db.insert(votes)
+        .values({ itemId, count: 1 })
+        .onConflictDoUpdate({
+          target: votes.itemId,
+          set: { count: sql`${votes.count} + 1` }
+        })
+        .run();
+      db.update(bookmarks)
+        .set({ saveCount: sql`${bookmarks.saveCount} + 1` })
+        .where(eq(bookmarks.id, itemId))
+        .run();
     }
   }
 
   // Reports
   reportItem(itemId: string, reason: string): void {
-    const result = stmts.reportItem.run(itemId, reason, Date.now());
-    if (result.changes > 0) {
-      stmts.incrementReportsCount.run(itemId);
+    const res = db.insert(reports)
+      .values({ itemId, reason, createdAt: Date.now() })
+      .onConflictDoNothing()
+      .run();
+
+    if (res.changes > 0) {
+      db.update(bookmarks)
+        .set({ reportsCount: sql`${bookmarks.reportsCount} + 1` })
+        .where(eq(bookmarks.id, itemId))
+        .run();
     }
   }
 }
 
-// Export both the raw db (for edge cases) and the provider
-export { db };
+export { rawDb as db };
 export const sqliteProvider = new SqliteProvider();
