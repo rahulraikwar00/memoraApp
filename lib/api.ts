@@ -103,12 +103,13 @@ export const api = new ApiClient(API_URL);
 export interface FeedItem {
   id: string;
   url: string;
-  title: string;
-  description?: string;
-  image_url?: string;
-  domain: string;
-  tags: string[];
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+  domain: string | null;
+  tags: string | string[];
   save_count: number;
+  reports_count?: number;
   created_at: number;
 }
 
@@ -139,6 +140,8 @@ export const feedApi = {
   },
   vote: (id: string) =>
     api.post<{ success: boolean }>(`/api/vote`, { item_id: id }),
+  report: (id: string, reason: string) =>
+    api.post<{ success: boolean }>(`/api/feed/report`, { item_id: id, reason }),
 };
 
 export const metadataApi = {

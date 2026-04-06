@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Text, Linking, Alert } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Text, Linking, Alert, Share } from 'react-native';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { getUserTopTags } from '../../lib/db';
 import { feedApi, FeedItem, FeedResponse } from '../../lib/api';
@@ -13,10 +13,9 @@ export default function DiscoverScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userTags, setUserTags] = useState<string[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const { colors, spacing, typography } = useThemeStore();
-  const { addBookmark } = useBookmarkStore();
+  const { addBookmark, removeBookmark } = useBookmarkStore();
 
   const fetchFeed = useCallback(async () => {
     try {
@@ -27,7 +26,7 @@ export default function DiscoverScreen() {
       const data: FeedResponse = await feedApi.getFeed([], 50);
       const allItems = [...(data.trending || []), ...(data.recent || [])];
       const unique = Array.from(new Map(allItems.map(i => [i.id, i])).values());
-      const filtered = unique.filter(item => item.url && item.image_url);
+      const filtered = unique.filter(item => item.url); // Relax filter to URLs only, allow recommendations based on tags
       setFeed(filtered);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -42,67 +41,49 @@ export default function DiscoverScreen() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     setSavedIds(new Set());
-    setUpvotedIds(new Set());
     await fetchFeed();
     setIsRefreshing(false);
   };
 
   const handleSave = async (item: FeedItem) => {
-    setSavedIds(prev => new Set([...prev, item.id]));
-    try {
-      await addBookmark({
-        url: item.url || '',
-        title: item.title || null,
-        description: item.description || null,
-        image_url: item.image_url || null,
-        domain: item.domain || null,
-        tags: typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags || []),
-        is_public: 0,
-        local_path: null,
-      });
-    } catch {
+    const isCurrentlySaved = savedIds.has(item.id);
+    
+    if (isCurrentlySaved) {
       setSavedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+      try {
+        await removeBookmark(item.id);
+      } catch {
+        setSavedIds(prev => new Set([...prev, item.id]));
+      }
+    } else {
+      setSavedIds(prev => new Set([...prev, item.id]));
+      try {
+        await addBookmark({
+          id: item.id, // Use same ID to allow reverse lookup
+          url: item.url || '',
+          title: item.title || null,
+          description: item.description || null,
+          image_url: item.image_url || null,
+          domain: item.domain || null,
+          tags: typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags || []),
+          is_public: 0,
+          local_path: null,
+        } as any);
+      } catch {
+        setSavedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+      }
     }
   };
 
-  const handleUpvote = async (item: FeedItem) => {
-    if (upvotedIds.has(item.id)) return;
-    setUpvotedIds(prev => new Set([...prev, item.id]));
-    try { await feedApi.vote(item.id); } catch {
-      setUpvotedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+  const handleShare = async (item: FeedItem) => {
+    try {
+      await Share.share({
+        message: `${item.title || 'Check out this bookmark'}\n${item.url}`,
+        url: item.url,
+      });
+    } catch (error) {
+      console.error('Share error:', error);
     }
-  };
-
-  const handleDownvote = async (item: FeedItem) => {
-    // Placeholder: downvote not implemented in API yet
-    Alert.alert("Downvote", "Downvote feature coming soon!");
-  };
-
-  const handleReport = async (item: FeedItem) => {
-    Alert.prompt(
-      "Report Content",
-      "Please provide a reason for reporting this content:",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Report",
-          onPress: async (value?: string) => {
-            if (!value?.trim()) return;
-            try {
-              await fetch('/api/feed/report', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ item_id: item.id, reason: value }),
-              });
-              Alert.alert("Reported", "Thank you for your feedback. We will review this content.");
-            } catch {
-              Alert.alert("Error", "Failed to report content.");
-            }
-          }
-        }
-      ],
-      "plain-text"
-    );
   };
 
   const renderItem = ({ item }: { item: FeedItem }) => (
@@ -114,7 +95,7 @@ export default function DiscoverScreen() {
         title: item.title || null,
         description: item.description || null,
         image_url: item.image_url || null,
-        domain: item.domain,
+        domain: item.domain || null,
         tags: typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags || []),
         is_public: 1,
         is_favorite: 0,
@@ -127,11 +108,7 @@ export default function DiscoverScreen() {
       onPress={() => item.url ? Linking.openURL(item.url) : undefined}
       onSave={() => handleSave(item)}
       isSaved={savedIds.has(item.id)}
-      onUpvote={() => handleUpvote(item)}
-      isUpvoted={upvotedIds.has(item.id)}
-      saveCount={item.save_count}
-      onDownvote={() => handleDownvote(item)}
-      onReport={() => handleReport(item)}
+      onShare={() => handleShare(item)}
     />
   );
 

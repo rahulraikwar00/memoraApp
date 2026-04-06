@@ -32,7 +32,6 @@ interface GridBookmarkCardProps {
   isVoted?: boolean;
   variant?: "feed" | "default";
   onUpvote?: () => void;
-  onDownvote?: () => void;
   onReport?: () => void;
   onSave?: () => void;
   isUpvoted?: boolean;
@@ -68,7 +67,6 @@ export default function GridBookmarkCard({
   isVoted,
   variant = "default",
   onUpvote,
-  onDownvote,
   onReport,
   onSave,
   isUpvoted,
@@ -278,62 +276,50 @@ export default function GridBookmarkCard({
           )}
 
           {variant === 'feed' && (
-            <View style={styles.socialButtons}>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: isUpvoted ? colors.accent : colors.card }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onUpvote?.();
-                }}
-              >
-                <Ionicons
-                  name="thumbs-up"
-                  size={14}
-                  color={isUpvoted ? '#fff' : colors.textSecondary}
-                />
-                <Text style={[styles.socialButtonText, { color: isUpvoted ? '#fff' : colors.textSecondary }]}>
-                  {saveCount || 0}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: colors.card }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onDownvote?.();
-                }}
-              >
-                <Ionicons
-                  name="thumbs-down"
-                  size={14}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: colors.card }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onReport?.();
-                }}
-              >
-                <Ionicons
-                  name="flag"
-                  size={14}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: isSaved ? colors.accent : colors.card }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onSave?.();
-                }}
-              >
-                <Ionicons
-                  name={isSaved ? "bookmark" : "bookmark-outline"}
-                  size={14}
-                  color={isSaved ? '#fff' : colors.textSecondary}
-                />
-              </Pressable>
+            <View style={styles.feedActions}>
+              <View style={styles.quickActionsRow}>
+                <Pressable
+                  style={[styles.saveButtonLarge, { 
+                    backgroundColor: isSaved ? colors.accent : colors.card,
+                    borderColor: isSaved ? colors.accent : colors.border,
+                  }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    Haptics.notificationAsync(isSaved ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success);
+                    onSave?.();
+                  }}
+                >
+                  <Ionicons
+                    name={isSaved ? "bookmark" : "bookmark-outline"}
+                    size={18}
+                    color={isSaved ? '#fff' : colors.textPrimary}
+                  />
+                  <Text style={[styles.saveButtonTextLarge, { color: isSaved ? '#fff' : colors.textPrimary }]}>
+                    {isSaved ? 'Saved' : 'Save'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.shareButtonLarge, { 
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onShare?.();
+                  }}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={18}
+                    color={colors.textPrimary}
+                  />
+                  <Text style={[styles.shareButtonTextLarge, { color: colors.textPrimary }]}>
+                    Share
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           )}
         </View>
@@ -380,26 +366,72 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 140,
+    height: 160,
   },
-  socialButtons: {
+  feedActions: {
+    marginTop: 10,
+    gap: 8,
+  },
+  quickActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 4,
-    marginTop: 4,
+    gap: 8,
   },
-  socialButton: {
+  saveButtonLarge: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
   },
-  socialButtonText: {
-    fontSize: 12,
+  saveButtonTextLarge: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shareButtonLarge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  shareButtonTextLarge: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  iconAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: 6,
+    borderRadius: 8,
+  },
+  actionLabel: {
+    fontSize: 13,
     fontWeight: '500',
   },
   voicePreview: {

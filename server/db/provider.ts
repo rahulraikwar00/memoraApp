@@ -10,6 +10,8 @@ export interface UpsertBookmarkParams {
   url: string;
   title: string | null;
   description: string | null;
+  image_url: string | null;
+  domain: string | null;
   createdAt: number;
 }
 
@@ -57,7 +59,7 @@ export interface DatabaseProvider {
   getFeedRecent(limit: number): BookmarkRow[];
 
   // ── Votes ───────────────────────────────────────────────────────────────
-  vote(itemId: string): void;
+  toggleVote(userId: string, itemId: string): void;
 
   // ── Reports ──────────────────────────────────────────────────────────────
   reportItem(itemId: string, reason: string): void;

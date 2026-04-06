@@ -10,7 +10,14 @@ router.post("/", (req: Request, res: Response) => {
     return res.status(400).json({ error: "item_id required" });
   }
 
-  dbProvider.vote(item_id);
+  // Resolve user
+  const authHeader = req.headers.authorization;
+  let userId = "anonymous";
+  if (authHeader?.startsWith("Bearer ")) {
+    userId = authHeader.split(" ")[1];
+  }
+
+  dbProvider.toggleVote(userId, item_id);
   res.json({ success: true });
 });
 
