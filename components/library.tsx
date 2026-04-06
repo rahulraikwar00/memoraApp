@@ -6,12 +6,12 @@ import {
   RefreshControl,
   Alert,
   Linking,
-  Clipboard,
   Text,
   ScrollView,
   Pressable,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useBookmarkStore } from "../stores/useBookmarkStore";
@@ -86,12 +86,12 @@ export default function LibraryScreen() {
 
   const handleShare = useCallback(async (bookmark: Bookmark) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Clipboard.setString(bookmark.url);
+    await Clipboard.setStringAsync(bookmark.url);
     Alert.alert("Copied", "Link copied to clipboard");
   }, []);
 
-  const handleCopyUrl = useCallback((url: string) => {
-    Clipboard.setString(url);
+  const handleCopyUrl = useCallback(async (url: string) => {
+    await Clipboard.setStringAsync(url);
     Alert.alert("Copied", "URL copied to clipboard");
   }, []);
 

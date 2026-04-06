@@ -7,8 +7,8 @@ import {
   Pressable,
   ScrollView,
   Alert,
-  Clipboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
 import { Bookmark } from "../lib/db";
@@ -55,8 +55,8 @@ export default function NoteReaderModal({
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
   const noteText = bookmark.description || bookmark.title || "";
 
-  const handleCopy = () => {
-    Clipboard.setString(noteText);
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(noteText);
     Alert.alert("Copied", "Note copied to clipboard");
   };
 

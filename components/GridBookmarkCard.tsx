@@ -1,7 +1,13 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, Dimensions, Alert } from "react-native";
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Dimensions,
+  Alert,
+} from "react-native";
 import { Image } from "expo-image";
-import { Audio } from "expo-av";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,6 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useAudioStore } from "../stores/useAudioStore";
 import { Bookmark } from "../lib/db";
 import { getContentType, getContentIcon } from "../lib/types";
 import TagChip from "./TagChip";
@@ -55,27 +62,25 @@ export default function GridBookmarkCard({
   isVoted,
 }: GridBookmarkCardProps) {
   const { colors, spacing } = useThemeStore();
+  const isPlaying = useAudioStore((state) => state.isPlaying);
+  const currentlyPlayingId = useAudioStore((state) => state.currentlyPlayingId);
+  const play = useAudioStore((state) => state.play);
+  const stop = useAudioStore((state) => state.stop);
+  const contentType = getContentType(bookmark);
+
+  const isThisPlaying =
+    contentType === "voice" && currentlyPlayingId === bookmark.id && isPlaying;
+
   const CARD_WIDTH =
     (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) /
     NUM_COLUMNS;
   const scale = useSharedValue(1);
 
-  const contentType = getContentType(bookmark);
   const CARD_HEIGHT = CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
 
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -95,35 +100,10 @@ export default function GridBookmarkCard({
       return;
     }
 
-    try {
-      if (isPlaying && soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
-        return;
-      }
-
-      if (soundRef.current && !isPlaying) {
-        await soundRef.current.playAsync();
-        setIsPlaying(true);
-        return;
-      }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: bookmark.local_path },
-        { shouldPlay: true },
-        (status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setIsPlaying(false);
-            soundRef.current?.setPositionAsync(0);
-          }
-        }
-      );
-
-      soundRef.current = sound;
-      setIsPlaying(true);
-    } catch (err) {
-      console.error("Playback error:", err);
-      Alert.alert("Error", "Failed to play audio");
+    if (isThisPlaying) {
+      await stop();
+    } else {
+      await play(bookmark.id, bookmark.local_path);
     }
   };
 
@@ -155,9 +135,10 @@ export default function GridBookmarkCard({
   };
 
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
-  const domain = contentType === 'link' 
-    ? (bookmark.domain || (bookmark.url ? new URL(bookmark.url).hostname : ''))
-    : '';
+  const domain =
+    contentType === "link"
+      ? bookmark.domain || (bookmark.url ? new URL(bookmark.url).hostname : "")
+      : "";
 
   const faviconUrl = domain
     ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
@@ -169,7 +150,7 @@ export default function GridBookmarkCard({
   };
 
   const renderPreview = () => {
-    if (contentType === 'image') {
+    if (contentType === "image") {
       const imageUri = bookmark.local_path || bookmark.image_url;
       if (!imageUri) return null;
       return (
@@ -182,38 +163,49 @@ export default function GridBookmarkCard({
       );
     }
 
-    if (contentType === 'voice') {
+    if (contentType === "voice") {
       return (
-        <View style={[styles.voicePreview, { backgroundColor: colors.elevated }]}>
+        <View
+          style={[styles.voicePreview, { backgroundColor: colors.elevated }]}
+        >
           <Pressable
             style={[styles.playButton, { backgroundColor: colors.accent }]}
             onPress={handleVoicePlay}
           >
             <Ionicons
-              name={isPlaying ? "pause" : "play"}
+              name={isThisPlaying ? "pause" : "play"}
               size={20}
               color="#fff"
             />
           </Pressable>
           <View style={styles.voiceInfo}>
-            <Text style={[styles.voiceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+            <Text
+              style={[styles.voiceTitle, { color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
               {bookmark.title?.replace(/\s*\(\d+:\d+\)/, "") || "Voice Note"}
             </Text>
             <Text style={[styles.voiceStatus, { color: colors.textTertiary }]}>
-              {isPlaying ? "Playing..." : "Tap to play"}
+              {isThisPlaying ? "Playing..." : "Tap to play"}
             </Text>
           </View>
         </View>
       );
     }
 
-    if (contentType === 'note') {
+    if (contentType === "note") {
       const noteText = bookmark.description || bookmark.title || "";
-      const preview = noteText.length > 80 ? noteText.substring(0, 80) + "..." : noteText;
+      const preview =
+        noteText.length > 80 ? noteText.substring(0, 80) + "..." : noteText;
       return (
-        <View style={[styles.notePreview, { backgroundColor: colors.elevated }]}>
+        <View
+          style={[styles.notePreview, { backgroundColor: colors.elevated }]}
+        >
           <Ionicons name="document-text" size={24} color={colors.accent} />
-          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={3}>
+          <Text
+            style={[styles.noteText, { color: colors.textSecondary }]}
+            numberOfLines={3}
+          >
             {preview}
           </Text>
         </View>
@@ -255,18 +247,23 @@ export default function GridBookmarkCard({
         {renderPreview()}
         <View style={[styles.content, { padding: spacing.sm }]}>
           <View style={styles.header}>
-            {contentType === 'link' && faviconUrl ? (
+            {contentType === "link" && faviconUrl ? (
               <Image
                 source={{ uri: faviconUrl }}
                 style={styles.favicon}
                 contentFit="contain"
               />
             ) : (
-              <View style={[styles.typeIcon, { backgroundColor: colors.accent + '20' }]}>
-                <Ionicons 
-                  name={getContentIcon(contentType)} 
-                  size={10} 
-                  color={colors.accent} 
+              <View
+                style={[
+                  styles.typeIcon,
+                  { backgroundColor: colors.accent + "20" },
+                ]}
+              >
+                <Ionicons
+                  name={getContentIcon(contentType)}
+                  size={10}
+                  color={colors.accent}
                 />
               </View>
             )}
@@ -274,10 +271,17 @@ export default function GridBookmarkCard({
               style={[styles.domain, { color: colors.textTertiary }]}
               numberOfLines={1}
             >
-              {contentType === 'link' ? domain : getContentIcon(contentType)}
+              {contentType === "link" ? domain : getContentIcon(contentType)}
             </Text>
-            <Pressable onPress={handleOptionsPress} style={styles.optionsButton}>
-              <Ionicons name="ellipsis-horizontal" size={16} color={colors.textTertiary} />
+            <Pressable
+              onPress={handleOptionsPress}
+              style={styles.optionsButton}
+            >
+              <Ionicons
+                name="ellipsis-horizontal"
+                size={16}
+                color={colors.textTertiary}
+              />
             </Pressable>
           </View>
 
@@ -285,10 +289,10 @@ export default function GridBookmarkCard({
             style={[styles.title, { color: colors.textPrimary }]}
             numberOfLines={2}
           >
-            {bookmark.title || bookmark.url || 'Untitled'}
+            {bookmark.title || bookmark.url || "Untitled"}
           </Text>
 
-          {tags.length > 0 && contentType !== 'voice' && (
+          {tags.length > 0 && contentType !== "voice" && (
             <View style={[styles.tags, { gap: spacing.xs }]}>
               {tags.slice(0, 2).map((tag, index) => (
                 <TagChip key={index} tag={tag} small />

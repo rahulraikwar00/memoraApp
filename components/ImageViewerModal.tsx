@@ -7,8 +7,8 @@ import {
   Pressable,
   Dimensions,
   Alert,
-  Clipboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
@@ -54,9 +54,9 @@ export default function ImageViewerModal({
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
   const imageUri = bookmark.local_path || bookmark.image_url;
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (imageUri) {
-      Clipboard.setString(imageUri);
+      await Clipboard.setStringAsync(imageUri);
       Alert.alert("Copied", "Image URL copied to clipboard");
     }
   };

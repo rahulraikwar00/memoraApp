@@ -1,101 +1,144 @@
-import { create } from 'zustand';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer } from "expo-audio";
+import { create } from "zustand";
 
 interface AudioState {
   currentlyPlayingId: string | null;
   isPlaying: boolean;
+  isLoading: boolean;
   position: number;
   duration: number;
-  soundRef: Audio.Sound | null;
+  player: AudioPlayer | null;
+
   play: (bookmarkId: string, audioUri: string) => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
   stop: () => Promise<void>;
+  toggle: () => Promise<void>;
+  seekTo: (positionMillis: number) => Promise<void>;
 }
 
 export const useAudioStore = create<AudioState>((set, get) => ({
   currentlyPlayingId: null,
   isPlaying: false,
+  isLoading: false,
   position: 0,
   duration: 0,
-  soundRef: null,
+  player: null,
 
   play: async (bookmarkId: string, audioUri: string) => {
-    const { currentlyPlayingId, soundRef, stop } = get();
+    const { currentlyPlayingId, player, isLoading } = get();
 
-    if (currentlyPlayingId === bookmarkId && soundRef) {
-      await soundRef.playAsync();
-      set({ isPlaying: true });
+    if (isLoading) {
+      console.log("Already loading audio, ignoring play request");
       return;
     }
 
-    if (soundRef) {
-      await stop();
+    if (currentlyPlayingId === bookmarkId && player) {
+      if (player.playing) {
+        player.pause();
+        set({ isPlaying: false });
+      } else {
+        player.play();
+        set({ isPlaying: true });
+      }
+      return;
     }
+
+    set({ isLoading: true });
 
     try {
-      set({ position: 0, duration: 0 });
+      if (player) {
+        player.pause();
+        player.remove();
+      }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true },
-        (status) => {
-          if (status.isLoaded) {
-            if (status.didJustFinish) {
-              set({ isPlaying: false, currentlyPlayingId: null, position: 0 });
-              sound.setPositionAsync(0);
-            } else {
-              set({
-                position: status.positionMillis || 0,
-                duration: status.durationMillis || 0,
-              });
-            }
-          }
+      const newPlayer = createAudioPlayer({ uri: audioUri });
+      
+      newPlayer.addListener("playbackStatusUpdate", (status) => {
+        set({
+          position: status.currentTime * 1000,
+          duration: (status.duration || 0) * 1000,
+          isPlaying: status.playing,
+        });
+
+        if (status.didJustFinish) {
+          set({
+            isPlaying: false,
+            currentlyPlayingId: null,
+            position: 0,
+            isLoading: false,
+          });
         }
-      );
+      });
 
-      set({ soundRef: sound, currentlyPlayingId: bookmarkId, isPlaying: true });
+      newPlayer.play();
+
+      set({
+        player: newPlayer,
+        currentlyPlayingId: bookmarkId,
+        isPlaying: true,
+        isLoading: false,
+      });
     } catch (err) {
-      console.error('Audio playback error:', err);
-      set({ isPlaying: false, currentlyPlayingId: null });
-    }
-  },
-
-  pause: async () => {
-    const { soundRef } = get();
-    if (soundRef) {
-      const status = await soundRef.getStatusAsync();
-      await soundRef.pauseAsync();
-      set({ 
+      console.error("Audio playback error:", err);
+      set({
         isPlaying: false,
-        position: status.isLoaded ? status.positionMillis || 0 : 0,
+        currentlyPlayingId: null,
+        isLoading: false,
+        player: null,
       });
     }
   },
 
+  pause: async () => {
+    const { player, isLoading } = get();
+    if (player && !isLoading) {
+      player.pause();
+      set({ isPlaying: false });
+    }
+  },
+
   resume: async () => {
-    const { soundRef } = get();
-    if (soundRef) {
-      await soundRef.playAsync();
+    const { player, isLoading } = get();
+    if (player && !isLoading) {
+      player.play();
       set({ isPlaying: true });
     }
   },
 
   stop: async () => {
-    const { soundRef } = get();
-    if (soundRef) {
-      await soundRef.stopAsync();
-      await soundRef.unloadAsync();
-      set({ soundRef: null, currentlyPlayingId: null, isPlaying: false, position: 0, duration: 0 });
+    const { player, isLoading } = get();
+    if (player && !isLoading) {
+      player.pause();
+      // Remove listener first to prevent race condition with status updates
+      player.remove();
+      set({
+        player: null,
+        currentlyPlayingId: null,
+        isPlaying: false,
+        position: 0,
+        duration: 0,
+        isLoading: false,
+      });
     }
   },
 
   toggle: async () => {
-    const { isPlaying, pause, resume } = get();
+    const { isPlaying, isLoading, pause, resume } = get();
+    if (isLoading) return;
+
     if (isPlaying) {
       await pause();
     } else {
       await resume();
+    }
+  },
+
+  seekTo: async (positionMillis: number) => {
+    const { player, isLoading } = get();
+    if (player && !isLoading) {
+      player.seekTo(positionMillis / 1000);
+      set({ position: positionMillis });
     }
   },
 }));

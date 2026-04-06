@@ -6,8 +6,8 @@ import {
   StyleSheet,
   Pressable,
   Alert,
-  Clipboard,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeStore } from "../stores/useThemeStore";
 import { Bookmark } from "../lib/db";
@@ -38,8 +38,8 @@ export default function BookmarkOptionsModal({
   const contentType = getContentType(bookmark);
   const isLink = contentType === "link";
 
-  const handleCopyUrl = () => {
-    Clipboard.setString(bookmark.url);
+  const handleCopyUrl = async () => {
+    await Clipboard.setStringAsync(bookmark.url);
     Alert.alert("Copied", "URL copied to clipboard");
   };
 

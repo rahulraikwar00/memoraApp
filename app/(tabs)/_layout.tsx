@@ -1,19 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, Tabs } from "expo-router";
+import { router, Tabs, useNavigation } from "expo-router";
 import { useEffect } from "react";
 import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import { colors } from "../../constants/theme";
 import { useAudioStore } from "../../stores/useAudioStore";
 
 export default function TabLayout() {
+  const navigation = useNavigation();
+  const stop = useAudioStore((state) => state.stop);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
-        useAudioStore.getState().stop();
+        stop();
       }
     });
-    return () => subscription.remove();
-  }, []);
+
+    const unsubscribe = navigation.addListener("state", () => {
+      stop();
+    });
+
+    return () => {
+      subscription.remove();
+      unsubscribe();
+    };
+  }, [navigation, stop]);
 
   const HeaderRight = () => (
     <Pressable
@@ -103,12 +114,13 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -18,
+    marginTop: -10,
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
+
   },
   saveButtonActive: {
     backgroundColor: colors.accentLight,
