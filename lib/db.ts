@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import * as Crypto from "expo-crypto";
 
 export interface Bookmark {
   id: string;
@@ -99,44 +100,27 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
     await database.execAsync(createSyncQueue);
     await database.execAsync(createUserTags);
 
-    // Migrate: add status column if it doesn't exist (for old databases)
-    try {
-      await database.execAsync(
-        `ALTER TABLE sync_queue ADD COLUMN status TEXT DEFAULT 'pending'`,
-      );
-    } catch {
-      // Column already exists
-    }
+    // Run migrations (columns that might be missing in older versions)
+    const migrations = [
+      { table: "sync_queue", column: "status", type: "TEXT DEFAULT 'pending'" },
+      { table: "sync_queue", column: "retry_count", type: "INTEGER DEFAULT 0" },
+      { table: "bookmarks", column: "local_path", type: "TEXT" },
+      { table: "bookmarks", column: "is_favorite", type: "INTEGER DEFAULT 0" },
+    ];
 
-    try {
-      await database.execAsync(
-        `ALTER TABLE sync_queue ADD COLUMN retry_count INTEGER DEFAULT 0`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    try {
-      await database.execAsync(
-        `ALTER TABLE bookmarks ADD COLUMN local_path TEXT`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    try {
-      await database.execAsync(
-        `ALTER TABLE bookmarks ADD COLUMN is_favorite INTEGER DEFAULT 0`,
-      );
-    } catch {
-      // Column already exists
+    for (const m of migrations) {
+      try {
+        await database.execAsync(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`);
+      } catch {
+        // Column already exists
+      }
     }
 
     for (const idx of createIndexes) {
       try {
         await database.execAsync(idx);
       } catch {
-        // Index might already exist
+        // Index already exists
       }
     }
 
@@ -195,7 +179,7 @@ export async function createBookmark(
 ): Promise<Bookmark> {
   const database = await getDb();
 
-  const id = Date.now().toString() + Math.random().toString(36).slice(2);
+  const id = Crypto.randomUUID();
   const now = Date.now();
 
   await database.runAsync(
@@ -341,7 +325,7 @@ export async function addToSyncQueue(
   payload: object,
 ): Promise<void> {
   const database = await getDb();
-  const id = Date.now().toString() + Math.random().toString(36).slice(2);
+  const id = Crypto.randomUUID();
   const now = Date.now();
 
   await database.runAsync(

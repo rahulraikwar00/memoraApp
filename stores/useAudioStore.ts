@@ -70,9 +70,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
           });
         }
       });
-
       newPlayer.play();
-
       set({
         player: newPlayer,
         currentlyPlayingId: bookmarkId,

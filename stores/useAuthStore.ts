@@ -1,42 +1,48 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import * as SecureStore from 'expo-secure-store';
+
+// Custom storage adapter for Expo SecureStore
+const SecureStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    return (await SecureStore.getItemAsync(name)) || null;
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await SecureStore.setItemAsync(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    await SecureStore.deleteItemAsync(name);
+  },
+};
 
 interface AuthState {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  setToken: (token: string | null) => Promise<void>;
-  loadToken: () => Promise<void>;
-  logout: () => Promise<void>;
+  setToken: (token: string | null) => void;
+  logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  token: null,
-  isLoading: true,
-  isAuthenticated: false,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
+      isLoading: false,
+      isAuthenticated: false,
 
-  setToken: async (token: string | null) => {
-    if (token) {
-      await SecureStore.setItemAsync('auth_token', token);
-      set({ token, isAuthenticated: true });
-    } else {
-      await SecureStore.deleteItemAsync('auth_token');
-      set({ token: null, isAuthenticated: false });
+      setToken: (token: string | null) => {
+        set({ token, isAuthenticated: !!token });
+      },
+
+      logout: () => {
+        set({ token: null, isAuthenticated: false });
+      },
+    }),
+    {
+      name: 'auth-storage',
+      storage: createJSONStorage(() => SecureStorage),
+      // Only persist the token
+      partialize: (state) => ({ token: state.token, isAuthenticated: state.isAuthenticated }),
     }
-  },
-
-  loadToken: async () => {
-    set({ isLoading: true });
-    try {
-      const token = await SecureStore.getItemAsync('auth_token');
-      set({ token, isAuthenticated: !!token, isLoading: false });
-    } catch {
-      set({ token: null, isAuthenticated: false, isLoading: false });
-    }
-  },
-
-  logout: async () => {
-    await SecureStore.deleteItemAsync('auth_token');
-    set({ token: null, isAuthenticated: false });
-  },
-}));
+  )
+);

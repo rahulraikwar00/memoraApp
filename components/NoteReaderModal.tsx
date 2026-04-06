@@ -52,6 +52,12 @@ export default function NoteReaderModal({
   onDelete,
 }: NoteReaderModalProps) {
   const { colors, spacing } = useThemeStore();
+  
+  // Guard against null/undefined bookmark or not visible
+  if (!visible || !bookmark) {
+    return null;
+  }
+  
   const tags = JSON.parse(bookmark.tags || "[]") as string[];
   const noteText = bookmark.description || bookmark.title || "";
 

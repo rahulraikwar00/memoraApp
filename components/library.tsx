@@ -21,7 +21,7 @@ import GridBookmarkCard from "./GridBookmarkCard";
 import EmptyState from "./EmptyState";
 import SkeletonCard from "./SkeletonCard";
 import { Bookmark } from "../lib/db";
-import { filterBookmarks, CATEGORY_TYPE_MAP, ContentType } from "../lib/filter";
+import { filterBookmarks, CATEGORY_TYPE_MAP } from "../lib/filter";
 
 const CATEGORIES = ["All", "Link", "Image", "Note", "Voice", "AI", "Art"];
 
@@ -79,19 +79,22 @@ export default function LibraryScreen() {
     [togglePublic],
   );
 
-  const handleOpenLink = useCallback(async (url: string) => {
+  const handleOpenLink = useCallback(async (bookmark: Bookmark) => {
+    if (!bookmark.url) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL(url);
+    Linking.openURL(bookmark.url);
   }, []);
 
   const handleShare = useCallback(async (bookmark: Bookmark) => {
+    if (!bookmark.url) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await Clipboard.setStringAsync(bookmark.url);
     Alert.alert("Copied", "Link copied to clipboard");
   }, []);
 
-  const handleCopyUrl = useCallback(async (url: string) => {
-    await Clipboard.setStringAsync(url);
+  const handleCopyUrl = useCallback(async (bookmark: Bookmark) => {
+    if (!bookmark.url) return;
+    await Clipboard.setStringAsync(bookmark.url);
     Alert.alert("Copied", "URL copied to clipboard");
   }, []);
 
@@ -100,13 +103,10 @@ export default function LibraryScreen() {
       return (
         <GridBookmarkCard
           bookmark={item}
-          onOpenLink={() => handleOpenLink(item.url)}
+          onOpenLink={() => handleOpenLink(item)}
           onTogglePublic={() => handleTogglePublic(item.id)}
-          onEdit={() => {
-            /* Logic for edit if needed */
-          }}
           onShare={() => handleShare(item)}
-          onCopyUrl={() => handleCopyUrl(item.url)}
+          onCopyUrl={() => handleCopyUrl(item)}
           onDelete={() => handleDelete(item.id)}
         />
       );
