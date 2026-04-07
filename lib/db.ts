@@ -1,5 +1,8 @@
-import * as SQLite from "expo-sqlite";
+import { getDb } from "./drizzle";
+import { bookmarks, syncQueue, userTags } from "./schema";
+import { eq, desc, sql, or, like, notInArray, and } from "drizzle-orm";
 
+// Re-export types for backwards compatibility
 export interface Bookmark {
   id: string;
   url: string;
@@ -26,125 +29,10 @@ export interface SyncQueueItem {
   created_at: number;
 }
 
-let db: SQLite.SQLiteDatabase | null = null;
-
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!db) {
-    try {
-      console.log("Opening database...");
-
-      // NOTE: Don't delete the database on each load - that would lose all data!
-      // The schema migration in initSchema handles schema updates safely
-      // 
-      // For manually clearing data (development only), use clearAllData() function
-      // or add a specific version check to clear old corrupted databases
-
-      db = await SQLite.openDatabaseAsync("memora.db");
-      console.log("Database opened, initializing schema...");
-      await initSchema(db);
-      console.log("Database ready");
-    } catch (error) {
-      console.error("Failed to open database:", error);
-      throw error;
-    }
-  }
-  return db;
-}
-
-async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
-  const createBookmarks = `
-    CREATE TABLE IF NOT EXISTS bookmarks (
-      id TEXT PRIMARY KEY,
-      url TEXT NOT NULL,
-      title TEXT,
-      description TEXT,
-      image_url TEXT,
-      domain TEXT,
-      tags TEXT DEFAULT '[]',
-      is_public INTEGER DEFAULT 0,
-      created_at INTEGER,
-      updated_at INTEGER,
-      synced_at INTEGER,
-      is_deleted INTEGER DEFAULT 0
-    )
-  `;
-
-  const createSyncQueue = `
-    CREATE TABLE IF NOT EXISTS sync_queue (
-      id TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      operation TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      retry_count INTEGER DEFAULT 0,
-      created_at INTEGER
-    )
-  `;
-
-  const createUserTags = `
-    CREATE TABLE IF NOT EXISTS user_tags (
-      tag TEXT PRIMARY KEY,
-      count INTEGER DEFAULT 0,
-      last_used INTEGER
-    )
-  `;
-
-  const createIndexes = [
-    `CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_bookmarks_is_deleted ON bookmarks(is_deleted)`,
-    `CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)`,
-  ];
-
-  try {
-    await database.execAsync(createBookmarks);
-    await database.execAsync(createSyncQueue);
-    await database.execAsync(createUserTags);
-
-    // Migrate: add status column if it doesn't exist (for old databases)
-    try {
-      await database.execAsync(
-        `ALTER TABLE sync_queue ADD COLUMN status TEXT DEFAULT 'pending'`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    try {
-      await database.execAsync(
-        `ALTER TABLE sync_queue ADD COLUMN retry_count INTEGER DEFAULT 0`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    try {
-      await database.execAsync(
-        `ALTER TABLE bookmarks ADD COLUMN local_path TEXT`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    try {
-      await database.execAsync(
-        `ALTER TABLE bookmarks ADD COLUMN is_favorite INTEGER DEFAULT 0`,
-      );
-    } catch {
-      // Column already exists
-    }
-
-    for (const idx of createIndexes) {
-      try {
-        await database.execAsync(idx);
-      } catch {
-        // Index might already exist
-      }
-    }
-
-    console.log("Database schema initialized");
-  } catch (error) {
-    console.error("Failed to initialize schema:", error);
-    throw error;
-  }
+export interface UserTag {
+  tag: string;
+  count: number;
+  last_used: number;
 }
 
 export async function initDatabase(): Promise<void> {
@@ -152,39 +40,90 @@ export async function initDatabase(): Promise<void> {
 }
 
 export async function searchBookmarks(query: string): Promise<Bookmark[]> {
-  const database = await getDb();
+  const db = await getDb();
   if (!query.trim()) return getBookmarks();
 
   const searchTerm = `%${query.toLowerCase()}%`;
-  const results = await database.getAllAsync<Bookmark>(
-    `SELECT * FROM bookmarks 
-     WHERE is_deleted = 0 AND (
-       LOWER(title) LIKE ? OR 
-       LOWER(description) LIKE ? OR 
-       LOWER(tags) LIKE ? OR 
-       LOWER(domain) LIKE ?
-     )
-     ORDER BY created_at DESC`,
-    [searchTerm, searchTerm, searchTerm, searchTerm],
-  );
-  return results;
+
+  return db.select({
+    id: bookmarks.id,
+    url: bookmarks.url,
+    title: bookmarks.title,
+    description: bookmarks.description,
+    image_url: bookmarks.imageUrl,
+    domain: bookmarks.domain,
+    tags: bookmarks.tags,
+    is_public: bookmarks.isPublic,
+    is_favorite: bookmarks.isFavorite,
+    local_path: bookmarks.localPath,
+    created_at: bookmarks.createdAt,
+    updated_at: bookmarks.updatedAt,
+    synced_at: bookmarks.syncedAt,
+    is_deleted: bookmarks.isDeleted,
+  })
+  .from(bookmarks)
+  .where(and(
+    eq(bookmarks.isDeleted, 0),
+    or(
+      like(sql`LOWER(${bookmarks.title})`, searchTerm),
+      like(sql`LOWER(${bookmarks.description})`, searchTerm),
+      like(sql`LOWER(${bookmarks.tags})`, searchTerm),
+      like(sql`LOWER(${bookmarks.domain})`, searchTerm)
+    )
+  ))
+  .orderBy(desc(bookmarks.createdAt))
+  .all() as unknown as Bookmark[];
 }
 
 export async function getBookmarks(): Promise<Bookmark[]> {
-  const database = await getDb();
-  const results = await database.getAllAsync<Bookmark>(
-    "SELECT * FROM bookmarks WHERE is_deleted = 0 ORDER BY created_at DESC",
-  );
-  console.log("getBookmarks result:", results.length, "bookmarks");
-  return results;
+  const db = await getDb();
+
+  return db.select({
+    id: bookmarks.id,
+    url: bookmarks.url,
+    title: bookmarks.title,
+    description: bookmarks.description,
+    image_url: bookmarks.imageUrl,
+    domain: bookmarks.domain,
+    tags: bookmarks.tags,
+    is_public: bookmarks.isPublic,
+    is_favorite: bookmarks.isFavorite,
+    local_path: bookmarks.localPath,
+    created_at: bookmarks.createdAt,
+    updated_at: bookmarks.updatedAt,
+    synced_at: bookmarks.syncedAt,
+    is_deleted: bookmarks.isDeleted,
+  })
+  .from(bookmarks)
+  .where(eq(bookmarks.isDeleted, 0))
+  .orderBy(desc(bookmarks.createdAt))
+  .all() as unknown as Bookmark[];
 }
 
 export async function getBookmarkById(id: string): Promise<Bookmark | null> {
-  const database = await getDb();
-  return database.getFirstAsync<Bookmark>(
-    "SELECT * FROM bookmarks WHERE id = ?",
-    [id],
-  );
+  const db = await getDb();
+
+  const result = await db.select({
+    id: bookmarks.id,
+    url: bookmarks.url,
+    title: bookmarks.title,
+    description: bookmarks.description,
+    image_url: bookmarks.imageUrl,
+    domain: bookmarks.domain,
+    tags: bookmarks.tags,
+    is_public: bookmarks.isPublic,
+    is_favorite: bookmarks.isFavorite,
+    local_path: bookmarks.localPath,
+    created_at: bookmarks.createdAt,
+    updated_at: bookmarks.updatedAt,
+    synced_at: bookmarks.syncedAt,
+    is_deleted: bookmarks.isDeleted,
+  })
+  .from(bookmarks)
+  .where(eq(bookmarks.id, id))
+  .get();
+
+  return result as unknown as Bookmark | null;
 }
 
 export async function createBookmark(
@@ -193,31 +132,27 @@ export async function createBookmark(
     "id" | "created_at" | "updated_at" | "synced_at" | "is_deleted" | "is_favorite"
   >,
 ): Promise<Bookmark> {
-  const database = await getDb();
+  const db = await getDb();
 
   const id = Date.now().toString() + Math.random().toString(36).slice(2);
   const now = Date.now();
 
-  await database.runAsync(
-    `INSERT INTO bookmarks (id, url, title, description, image_url, domain, tags, is_public, is_favorite, local_path, created_at, updated_at, synced_at, is_deleted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      data.url,
-      data.title,
-      data.description,
-      data.image_url,
-      data.domain,
-      data.tags,
-      data.is_public,
-      0,
-      data.local_path || null,
-      now,
-      now,
-      null,
-      0,
-    ],
-  );
+  await db.insert(bookmarks).values({
+    id,
+    url: data.url,
+    title: data.title,
+    description: data.description,
+    imageUrl: data.image_url,
+    domain: data.domain,
+    tags: data.tags,
+    isPublic: data.is_public,
+    isFavorite: 0,
+    localPath: data.local_path || null,
+    createdAt: now,
+    updatedAt: now,
+    syncedAt: null,
+    isDeleted: 0,
+  }).run();
 
   await addToSyncQueue("create", { ...data, id, created_at: now });
 
@@ -241,57 +176,27 @@ export async function updateBookmark(
   id: string,
   data: Partial<Omit<Bookmark, "id" | "created_at">>,
 ): Promise<void> {
-  const database = await getDb();
-
+  const db = await getDb();
   const now = Date.now();
-  const fields: string[] = [];
-  const values: (string | number | null)[] = [];
 
-  if (data.url !== undefined) {
-    fields.push("url = ?");
-    values.push(data.url);
-  }
-  if (data.title !== undefined) {
-    fields.push("title = ?");
-    values.push(data.title);
-  }
-  if (data.description !== undefined) {
-    fields.push("description = ?");
-    values.push(data.description);
-  }
-  if (data.image_url !== undefined) {
-    fields.push("image_url = ?");
-    values.push(data.image_url);
-  }
-  if (data.domain !== undefined) {
-    fields.push("domain = ?");
-    values.push(data.domain);
-  }
-  if (data.tags !== undefined) {
-    fields.push("tags = ?");
-    values.push(data.tags);
-  }
-  if (data.is_public !== undefined) {
-    fields.push("is_public = ?");
-    values.push(data.is_public);
-  }
-  if (data.local_path !== undefined) {
-    fields.push("local_path = ?");
-    values.push(data.local_path);
-  }
-  if (data.synced_at !== undefined) {
-    fields.push("synced_at = ?");
-    values.push(data.synced_at);
-  }
+  const updateData: Record<string, any> = {
+    updatedAt: now,
+  };
 
-  fields.push("updated_at = ?");
-  values.push(now);
-  values.push(id);
+  if (data.url !== undefined) updateData.url = data.url;
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.image_url !== undefined) updateData.imageUrl = data.image_url;
+  if (data.domain !== undefined) updateData.domain = data.domain;
+  if (data.tags !== undefined) updateData.tags = data.tags;
+  if (data.is_public !== undefined) updateData.isPublic = data.is_public;
+  if (data.local_path !== undefined) updateData.localPath = data.local_path;
+  if (data.synced_at !== undefined) updateData.syncedAt = data.synced_at;
 
-  await database.runAsync(
-    `UPDATE bookmarks SET ${fields.join(", ")} WHERE id = ?`,
-    values,
-  );
+  await db.update(bookmarks)
+    .set(updateData)
+    .where(eq(bookmarks.id, id))
+    .run();
 
   await addToSyncQueue("update", { id, ...data, updated_at: now });
 
@@ -301,20 +206,18 @@ export async function updateBookmark(
 }
 
 export async function deleteBookmark(id: string): Promise<void> {
-  const database = await getDb();
-
+  const db = await getDb();
   const now = Date.now();
-  await database.runAsync(
-    "UPDATE bookmarks SET is_deleted = 1, updated_at = ? WHERE id = ?",
-    [now, id],
-  );
+
+  await db.update(bookmarks)
+    .set({ isDeleted: 1, updatedAt: now })
+    .where(eq(bookmarks.id, id))
+    .run();
 
   await addToSyncQueue("delete", { id, deleted_at: now });
 }
 
-export async function toggleBookmarkPublic(
-  id: string,
-): Promise<Bookmark | null> {
+export async function toggleBookmarkPublic(id: string): Promise<Bookmark | null> {
   const bookmark = await getBookmarkById(id);
   if (!bookmark) return null;
 
@@ -324,9 +227,7 @@ export async function toggleBookmarkPublic(
   return getBookmarkById(id);
 }
 
-export async function toggleBookmarkFavorite(
-  id: string,
-): Promise<Bookmark | null> {
+export async function toggleBookmarkFavorite(id: string): Promise<Bookmark | null> {
   const bookmark = await getBookmarkById(id);
   if (!bookmark) return null;
 
@@ -336,77 +237,76 @@ export async function toggleBookmarkFavorite(
   return getBookmarkById(id);
 }
 
-export async function addToSyncQueue(
-  operation: string,
-  payload: object,
-): Promise<void> {
-  const database = await getDb();
+export async function addToSyncQueue(operation: string, payload: object): Promise<void> {
+  const db = await getDb();
   const id = Date.now().toString() + Math.random().toString(36).slice(2);
   const now = Date.now();
 
-  await database.runAsync(
-    `INSERT INTO sync_queue (id, payload, operation, status, retry_count, created_at)
-     VALUES (?, ?, ?, 'pending', 0, ?)`,
-    [id, JSON.stringify(payload), operation, now],
-  );
+  await db.insert(syncQueue).values({
+    id,
+    payload: JSON.stringify(payload),
+    operation,
+    status: "pending",
+    retryCount: 0,
+    createdAt: now,
+  }).run();
 }
 
-export async function getPendingSyncItems(
-  limit: number = 50,
-): Promise<SyncQueueItem[]> {
-  const database = await getDb();
-  return database.getAllAsync<SyncQueueItem>(
-    `SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?`,
-    [limit],
-  );
+export async function getPendingSyncItems(limit: number = 50): Promise<SyncQueueItem[]> {
+  const db = await getDb();
+
+  return db.select({
+    id: syncQueue.id,
+    payload: syncQueue.payload,
+    operation: syncQueue.operation,
+    status: syncQueue.status,
+    retry_count: syncQueue.retryCount,
+    created_at: syncQueue.createdAt,
+  })
+  .from(syncQueue)
+  .where(eq(syncQueue.status, "pending"))
+  .orderBy(syncQueue.createdAt)
+  .limit(limit)
+  .all() as unknown as SyncQueueItem[];
 }
 
 export async function markSyncItemComplete(id: string): Promise<void> {
-  const database = await getDb();
-  await database.runAsync(
-    `UPDATE sync_queue SET status = 'completed' WHERE id = ?`,
-    [id],
-  );
+  const db = await getDb();
+  await db.update(syncQueue).set({ status: "completed" }).where(eq(syncQueue.id, id)).run();
 }
 
 export async function incrementSyncRetry(id: string): Promise<void> {
-  const database = await getDb();
-  await database.runAsync(
-    `UPDATE sync_queue SET retry_count = retry_count + 1 WHERE id = ?`,
-    [id],
-  );
+  const db = await getDb();
+  await db.update(syncQueue)
+    .set({ retryCount: sql`${syncQueue.retryCount} + 1` })
+    .where(eq(syncQueue.id, id))
+    .run();
 }
 
 export async function clearCompletedSyncItems(): Promise<void> {
-  const database = await getDb();
-  await database.runAsync(`DELETE FROM sync_queue WHERE status = 'completed'`);
+  const db = await getDb();
+  await db.delete(syncQueue).where(eq(syncQueue.status, "completed")).run();
 }
 
 export async function getBookmarksCount(): Promise<number> {
-  const database = await getDb();
-  const result = await database.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM bookmarks WHERE is_deleted = 0",
-  );
+  const db = await getDb();
+  const result = await db.select({ count: sql<number>`COUNT(*)` })
+    .from(bookmarks)
+    .where(eq(bookmarks.isDeleted, 0))
+    .get();
+
   return result?.count ?? 0;
 }
 
 export async function clearAllData(): Promise<void> {
-  const database = await getDb();
-  await database.execAsync(`
-    DELETE FROM bookmarks;
-    DELETE FROM sync_queue;
-    DELETE FROM user_tags;
-  `);
-}
-
-export interface UserTag {
-  tag: string;
-  count: number;
-  last_used: number;
+  const db = await getDb();
+  await db.delete(bookmarks).run();
+  await db.delete(syncQueue).run();
+  await db.delete(userTags).run();
 }
 
 export async function updateUserTags(tags: string): Promise<void> {
-  const database = await getDb();
+  const db = await getDb();
   const tagsArray = JSON.parse(tags || "[]") as string[];
   const now = Date.now();
 
@@ -415,42 +315,69 @@ export async function updateUserTags(tags: string): Promise<void> {
     const normalizedTag = tag.toLowerCase().trim();
     if (!normalizedTag) continue;
 
-    await database.runAsync(
-      `INSERT INTO user_tags (tag, count, last_used) VALUES (?, 1, ?)
-       ON CONFLICT(tag) DO UPDATE SET count = count + 1, last_used = ?`,
-      [normalizedTag, now, now],
-    );
+    await db.insert(userTags)
+      .values({ tag: normalizedTag, count: 1, lastUsed: now })
+      .onConflictDoUpdate({
+        target: userTags.tag,
+        set: { count: sql`${userTags.count} + 1`, lastUsed: now }
+      })
+      .run();
   }
 }
 
 export async function getUserTopTags(limit: number = 10): Promise<UserTag[]> {
-  const database = await getDb();
-  return database.getAllAsync<UserTag>(
-    `SELECT tag, count, last_used FROM user_tags ORDER BY count DESC LIMIT ?`,
-    [limit],
-  );
+  const db = await getDb();
+
+  return db.select({
+    tag: userTags.tag,
+    count: userTags.count,
+    last_used: userTags.lastUsed,
+  })
+  .from(userTags)
+  .orderBy(desc(userTags.count))
+  .limit(limit)
+  .all() as unknown as UserTag[];
 }
 
 export async function getDiscoverFeed(userTags: string[]): Promise<Bookmark[]> {
-  const database = await getDb();
-  
+  const db = await getDb();
+
+  const baseQuery = db.select({
+    id: bookmarks.id,
+    url: bookmarks.url,
+    title: bookmarks.title,
+    description: bookmarks.description,
+    image_url: bookmarks.imageUrl,
+    domain: bookmarks.domain,
+    tags: bookmarks.tags,
+    is_public: bookmarks.isPublic,
+    is_favorite: bookmarks.isFavorite,
+    local_path: bookmarks.localPath,
+    created_at: bookmarks.createdAt,
+    updated_at: bookmarks.updatedAt,
+    synced_at: bookmarks.syncedAt,
+    is_deleted: bookmarks.isDeleted,
+  })
+  .from(bookmarks)
+  .where(and(
+    eq(bookmarks.isDeleted, 0),
+    notInArray(bookmarks.domain, ['local-image', 'local-note', 'local-voice'])
+  ));
+
   if (userTags.length === 0) {
-    return database.getAllAsync<Bookmark>(
-      `SELECT * FROM bookmarks 
-       WHERE is_deleted = 0 AND domain NOT IN ('local-image', 'local-note', 'local-voice')
-       ORDER BY created_at DESC LIMIT 50`,
-    );
+    return baseQuery
+      .orderBy(desc(bookmarks.createdAt))
+      .limit(50)
+      .all() as unknown as Bookmark[];
   }
 
-  const placeholders = userTags.filter(Boolean).map(() => `LOWER(tags) LIKE ?`).join(" OR ");
-  const params = userTags.filter(Boolean).map((tag) => `%${tag.toLowerCase()}%`);
-
-  return database.getAllAsync<Bookmark>(
-    `SELECT * FROM bookmarks 
-     WHERE is_deleted = 0 
-     AND domain NOT IN ('local-image', 'local-note', 'local-voice')
-     AND (${placeholders})
-     ORDER BY created_at DESC LIMIT 50`,
-    params,
+  const placeholders = userTags.filter(Boolean).map(tag =>
+    like(sql`LOWER(${bookmarks.tags})`, `%${tag.toLowerCase()}%`)
   );
+
+  return baseQuery
+    .where(or(...placeholders))
+    .orderBy(desc(bookmarks.createdAt))
+    .limit(50)
+    .all() as unknown as Bookmark[];
 }

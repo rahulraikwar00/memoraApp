@@ -1,17 +1,17 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
   Alert,
   Clipboard,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useThemeStore } from "../stores/useThemeStore";
 import { Bookmark } from "../lib/db";
-import { getContentType, getContentIcon } from "../lib/types";
+import { getContentType } from "../lib/types";
+import { useThemeStore } from "../stores/useThemeStore";
 
 interface BookmarkOptionsModalProps {
   visible: boolean;
@@ -57,7 +57,7 @@ export default function BookmarkOptionsModal({
             onClose();
           },
         },
-      ]
+      ],
     );
   };
 
@@ -91,18 +91,16 @@ export default function BookmarkOptionsModal({
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.container, { backgroundColor: colors.card }]}>
-          <View style={[styles.handle, { backgroundColor: colors.textTertiary }]} />
-          
+          <View
+            style={[styles.handle, { backgroundColor: colors.textTertiary }]}
+          />
+
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleRow}>
-              <View style={[styles.iconBadge, { backgroundColor: colors.accent + "20" }]}>
-                <Ionicons
-                  name={getContentIcon(contentType)}
-                  size={16}
-                  color={colors.accent}
-                />
-              </View>
-              <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
+              <Text
+                style={[styles.title, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
                 {bookmark.title || bookmark.url || "Bookmark"}
               </Text>
             </View>
@@ -117,11 +115,21 @@ export default function BookmarkOptionsModal({
                 style={[styles.option, { backgroundColor: colors.elevated }]}
                 onPress={handleOpenLink}
               >
-                <Ionicons name="open-outline" size={22} color={colors.textPrimary} />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                <Ionicons
+                  name="open-outline"
+                  size={22}
+                  color={colors.textPrimary}
+                />
+                <Text
+                  style={[styles.optionText, { color: colors.textPrimary }]}
+                >
                   Open Link
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
 
@@ -131,14 +139,22 @@ export default function BookmarkOptionsModal({
                 onPress={handleTogglePublic}
               >
                 <Ionicons
-                  name={bookmark.is_public ? "lock-closed-outline" : "globe-outline"}
+                  name={
+                    bookmark.is_public ? "lock-closed-outline" : "globe-outline"
+                  }
                   size={22}
                   color={colors.textPrimary}
                 />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                <Text
+                  style={[styles.optionText, { color: colors.textPrimary }]}
+                >
                   {bookmark.is_public ? "Make Private" : "Make Public"}
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
 
@@ -147,11 +163,21 @@ export default function BookmarkOptionsModal({
                 style={[styles.option, { backgroundColor: colors.elevated }]}
                 onPress={handleEdit}
               >
-                <Ionicons name="create-outline" size={22} color={colors.textPrimary} />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                <Ionicons
+                  name="create-outline"
+                  size={22}
+                  color={colors.textPrimary}
+                />
+                <Text
+                  style={[styles.optionText, { color: colors.textPrimary }]}
+                >
                   Edit
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
 
@@ -160,11 +186,21 @@ export default function BookmarkOptionsModal({
                 style={[styles.option, { backgroundColor: colors.elevated }]}
                 onPress={handleShare}
               >
-                <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                <Ionicons
+                  name="share-outline"
+                  size={22}
+                  color={colors.textPrimary}
+                />
+                <Text
+                  style={[styles.optionText, { color: colors.textPrimary }]}
+                >
                   Share
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
 
@@ -173,11 +209,21 @@ export default function BookmarkOptionsModal({
                 style={[styles.option, { backgroundColor: colors.elevated }]}
                 onPress={handleCopyUrl}
               >
-                <Ionicons name="copy-outline" size={22} color={colors.textPrimary} />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                <Ionicons
+                  name="copy-outline"
+                  size={22}
+                  color={colors.textPrimary}
+                />
+                <Text
+                  style={[styles.optionText, { color: colors.textPrimary }]}
+                >
                   Copy URL
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
 
@@ -186,11 +232,19 @@ export default function BookmarkOptionsModal({
                 style={[styles.option, { backgroundColor: colors.elevated }]}
                 onPress={handleDelete}
               >
-                <Ionicons name="trash-outline" size={22} color={colors.danger} />
+                <Ionicons
+                  name="trash-outline"
+                  size={22}
+                  color={colors.danger}
+                />
                 <Text style={[styles.optionText, { color: colors.danger }]}>
                   Delete
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textTertiary}
+                />
               </Pressable>
             )}
           </View>
@@ -232,6 +286,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
+    alignItems: "flex-end",
   },
   titleRow: {
     flexDirection: "row",
@@ -255,7 +310,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: "rgba(0,0,0,0.03)",
     alignItems: "center",
     justifyContent: "center",
   },
