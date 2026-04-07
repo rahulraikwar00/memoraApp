@@ -49,6 +49,7 @@ export default function TabLayout() {
         headerTintColor: colors.textPrimary,
         headerTitleStyle: {
           fontWeight: "600",
+          display: "none",
         },
         headerRight: HeaderRight,
         headerRightContainerStyle: { paddingRight: 8 },
@@ -58,7 +59,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "MEMORA",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="library" size={size} color={color} />
           ),
@@ -68,7 +69,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="save"
         options={{
-          title: "Save",
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <View
               style={[styles.saveButton, focused && styles.saveButtonActive]}
@@ -85,7 +86,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: "Discover",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="compass" size={size} color={color} />
           ),

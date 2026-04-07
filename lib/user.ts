@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   username: "user_username",
   avatarUrl: "user_avatar_url",
   onboardingComplete: "onboarding_complete",
+  interests: "user_interests",
 };
 
 const ADJECTIVES = [
@@ -39,14 +40,17 @@ export function generateRandomUsername(): string {
 }
 
 export function getAvatarUrl(username: string): string {
-  return `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(username)}`;
+  return `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(username)}`;
 }
 
-export async function saveUser(username: string): Promise<void> {
+export async function saveUser(username: string, interests: string[] = []): Promise<void> {
   const avatarUrl = getAvatarUrl(username);
   await SecureStore.setItemAsync(STORAGE_KEYS.username, username);
   await SecureStore.setItemAsync(STORAGE_KEYS.avatarUrl, avatarUrl);
   await SecureStore.setItemAsync(STORAGE_KEYS.onboardingComplete, "true");
+  if (interests.length > 0) {
+    await SecureStore.setItemAsync(STORAGE_KEYS.interests, JSON.stringify(interests));
+  }
 }
 
 export async function isOnboardingComplete(): Promise<boolean> {
@@ -81,4 +85,13 @@ export async function updateUsername(newUsername: string): Promise<void> {
   const avatarUrl = getAvatarUrl(newUsername);
   await SecureStore.setItemAsync(STORAGE_KEYS.username, newUsername);
   await SecureStore.setItemAsync(STORAGE_KEYS.avatarUrl, avatarUrl);
+}
+
+export async function getInterests(): Promise<string[]> {
+  try {
+    const value = await SecureStore.getItemAsync(STORAGE_KEYS.interests);
+    return value ? JSON.parse(value) : [];
+  } catch (e) {
+    return [];
+  }
 }

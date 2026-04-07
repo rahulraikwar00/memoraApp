@@ -40,7 +40,7 @@ export interface DatabaseProvider {
   getUserById(id: string): UserRow | undefined;
   getUserByUsername(username: string): UserRow | undefined;
   checkUsernameAvailable(username: string): boolean;
-  registerUser(id: string, username: string, avatarUrl: string | null): void;
+  registerUser(id: string, username: string, avatarUrl: string | null, interests?: string[]): void;
 
   // ── Bookmarks ───────────────────────────────────────────────────────────
   upsertBookmark(params: UpsertBookmarkParams): void;

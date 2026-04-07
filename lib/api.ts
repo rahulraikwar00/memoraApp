@@ -174,10 +174,11 @@ export const authApi = {
     api.get<CheckUsernameResponse>(
       `/api/auth/check-username?username=${encodeURIComponent(username)}`
     ),
-  register: (id: string, username: string, avatarUrl?: string) =>
-      api.post<RegisterUserResponse>("/api/auth/register", {
-        id,
-        username,
-        avatar_url: avatarUrl,
-      }),
+  register: (id: string, username: string, avatarUrl?: string, interests?: string[]) =>
+    api.post<RegisterUserResponse>("/api/auth/register", {
+      id,
+      username,
+      avatar_url: avatarUrl,
+      interests,
+    }),
 };

@@ -7,6 +7,7 @@ const registerSchema = z.object({
   id: z.string().min(1),
   username: z.string().min(1),
   avatar_url: z.string().url().optional().nullable(),
+  interests: z.array(z.string()).optional(),
 });
 
 const router = Router();
@@ -23,7 +24,7 @@ router.post("/register", (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
 
-  const { id, avatar_url } = parsed.data;
+  const { id, avatar_url, interests } = parsed.data;
   const username = parsed.data.username.toLowerCase().trim();
 
   // Check if device ID already registered
@@ -36,7 +37,7 @@ router.post("/register", (req: Request, res: Response) => {
   }
 
   try {
-    dbProvider.registerUser(id, username, avatar_url || null);
+    dbProvider.registerUser(id, username, avatar_url || null, interests);
     res.json({ success: true, username });
   } catch (err: any) {
     console.log("[REGISTER] Error:", err.message);

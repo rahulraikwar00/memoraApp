@@ -29,7 +29,8 @@ import DatabaseConstructor from "better-sqlite3";
 const dbPath = path.resolve(process.cwd(), "database.db");
 const rawDb = new DatabaseConstructor(dbPath) as Database;
 
-rawDb.exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, avatar_url TEXT, created_at INTEGER NOT NULL)`);
+rawDb.exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, avatar_url TEXT, interests TEXT, created_at INTEGER NOT NULL)`);
+try { rawDb.exec(`ALTER TABLE users ADD COLUMN interests TEXT`); } catch {}
 rawDb.exec(`CREATE TABLE IF NOT EXISTS bookmarks (id TEXT PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT, save_count INTEGER DEFAULT 0, reports_count INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`);
 try { rawDb.exec(`ALTER TABLE bookmarks ADD COLUMN image_url TEXT`); } catch {}
 try { rawDb.exec(`ALTER TABLE bookmarks ADD COLUMN domain TEXT`); } catch {}
@@ -80,13 +81,20 @@ export class SqliteProvider implements DatabaseProvider {
     return !this.getUserByUsername(username);
   }
 
-  registerUser(id: string, username: string, avatarUrl: string | null): void {
+  registerUser(id: string, username: string, avatarUrl: string | null, interests?: string[]): void {
     db.insert(users).values({
       id,
       username,
       avatarUrl,
+      interests: interests ? JSON.stringify(interests) : null,
       createdAt: Date.now()
     }).run();
+    
+    if (interests && interests.length > 0) {
+      for (const tag of interests) {
+        this.addUserTag(id, tag.toLowerCase());
+      }
+    }
   }
 
   // Bookmarks
