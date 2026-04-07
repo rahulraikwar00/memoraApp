@@ -1,7 +1,7 @@
+import { desc, eq, sql } from "drizzle-orm";
+import * as SQLite from "expo-sqlite";
 import { getDb } from "./drizzle";
 import { bookmarks, syncQueue, userTags } from "./schema";
-import { eq, desc, sql, or, like, notInArray, and } from "drizzle-orm";
-import * as SQLite from "expo-sqlite";
 
 // Re-export types for backwards compatibility
 export interface Bookmark {
@@ -53,7 +53,7 @@ export async function searchBookmarks(query: string): Promise<Bookmark[]> {
     
     const results = await expoDb.getAllAsync<Bookmark>(`
       SELECT b.* FROM bookmarks b
-      INNER JOIN bookmarks_fts fts ON b.rowid = fts.rowid
+      INNER JOIN bookmarks_fts fts ON b.id = fts.bookmark_id
       WHERE b.is_deleted = 0 AND bookmarks_fts MATCH ?
       ORDER BY b.created_at DESC
     `, [ftsQuery]);
@@ -217,13 +217,17 @@ export async function updateBookmark(
 }
 
 export async function deleteBookmark(id: string): Promise<void> {
+  if (!id) {
+    console.error("Delete failed: No ID provided");
+    throw new Error("ID is required to delete a bookmark");
+  }
+
+  console.log("Attempting to delete ID:", id, "Type:", typeof id);
   const db = await getDb();
   const now = Date.now();
 
-  await db.update(bookmarks)
-    .set({ isDeleted: 1, updatedAt: now })
-    .where(eq(bookmarks.id, id))
-    .run();
+  const expoDb = (db as any).$client as SQLite.SQLiteDatabase;
+  await expoDb.runAsync('DELETE FROM bookmarks WHERE id = ?', [id]);
 
   await addToSyncQueue("delete", { id, deleted_at: now });
 }

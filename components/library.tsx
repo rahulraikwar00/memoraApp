@@ -36,9 +36,7 @@ export default function LibraryScreen() {
   } = useBookmarkStore();
   const { colors, spacing } = useThemeStore();
   const { stop } = useAudioStore();
-
   const [selectedCategory, setSelectedCategory] = useState("All");
-
   useFocusEffect(
     useCallback(() => {
       loadBookmarks();
@@ -195,7 +193,7 @@ export default function LibraryScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={bookmarks}
+        data={filteredBookmarks}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
@@ -204,7 +202,7 @@ export default function LibraryScreen() {
         contentContainerStyle={[
           styles.list,
           { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
-          bookmarks.length === 0 && styles.emptyList,
+          filteredBookmarks.length === 0 && styles.emptyList,
         ]}
         refreshControl={
           <RefreshControl

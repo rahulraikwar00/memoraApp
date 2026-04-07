@@ -29,7 +29,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       console.log('Loading bookmarks from DB...');
       const bookmarks = await getBookmarks();
       console.log('Loaded bookmarks:', bookmarks.length);
-      set({ bookmarks, isLoading: false });
+      set({ bookmarks: bookmarks.filter(b => !b.is_deleted), isLoading: false });
     } catch (err) {
       console.error('Load bookmarks error:', err);
       set({ error: (err as Error).message, isLoading: false });
@@ -67,11 +67,15 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   },
 
   removeBookmark: async (id: string) => {
+    const { bookmarks } = get();
+    set({ bookmarks: bookmarks.filter(b => b.id !== id) });
+
     try {
       await deleteBookmark(id);
-      const { bookmarks } = get();
-      set({ bookmarks: bookmarks.filter(b => b.id !== id) });
+      console.log('Successfully deleted bookmark from DB:', id);
     } catch (err) {
+      console.error('Failed to delete bookmark from DB:', err);
+      await get().loadBookmarks();
       set({ error: (err as Error).message });
     }
   },
@@ -108,7 +112,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
     set({ isLoading: true, searchQuery: query });
     try {
       const bookmarks = query.trim() ? await searchBookmarks(query) : await getBookmarks();
-      set({ bookmarks, isLoading: false });
+      set({ bookmarks: bookmarks.filter(b => !b.is_deleted), isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }

@@ -135,7 +135,7 @@ export default function DiscoverScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, marginBottom: spacing.sm }}>
-        <Text style={[{ color: colors.textPrimary, ...typography.hero }]}>Discover</Text>
+        {/* <Text style={[{ color: colors.textPrimary, ...typography.hero }]}>Discover</Text> */}
         <Text style={[{ color: colors.textSecondary, ...typography.body, marginTop: 2 }]}>
           {userTags.length > 0 ? `For you · ${userTags.slice(0, 3).join(', ')}` : 'Explore trending content'}
         </Text>

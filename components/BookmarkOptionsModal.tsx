@@ -44,6 +44,7 @@ export default function BookmarkOptionsModal({
   };
 
   const handleDelete = () => {
+    console.log("Delete bookmark", bookmark.id);
     Alert.alert(
       "Delete Bookmark",
       "Are you sure you want to delete this bookmark?",

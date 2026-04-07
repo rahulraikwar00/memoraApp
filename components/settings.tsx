@@ -7,21 +7,18 @@ import {
   Pressable,
   Alert,
   Switch,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
-import { router } from "expo-router";
 import { useThemeStore } from "../stores/useThemeStore";
 import { clearAllData, getBookmarksCount } from "../lib/db";
-import { useAuthStore } from "../stores/useAuthStore";
-import {
-  getUsername,
-  updateUsername,
-  getUserAvatar,
-  isOnboardingComplete,
-} from "../lib/user";
-import * as SecureStore from "expo-secure-store";
+import { getUsername, getUserAvatar } from "../lib/user";
 import LogoutModal from "./LogoutModal";
+import { exportData, importData } from "../lib/export";
+
+type ImportStep = "idle" | "selecting" | "extracting" | "importing" | "done" | "error";
+type ExportStep = "idle" | "preparing" | "packing" | "sharing" | "done" | "error";
 
 const STORAGE_KEYS = {
   username: "user_username",
@@ -32,11 +29,12 @@ const STORAGE_KEYS = {
 export default function SettingsScreen() {
   const [bookmarkCount, setBookmarkCount] = useState(0);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
-  const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [exportStep, setExportStep] = useState<ExportStep>("idle");
+  const [importStep, setImportStep] = useState<ImportStep>("idle");
+  const [importResult, setImportResult] = useState<{ total: number; added: number; skipped: number } | null>(null);
   const { isDark, toggleTheme, colors, spacing, typography, borderRadius } =
     useThemeStore();
-  const { isAuthenticated, logout } = useAuthStore();
 
   useEffect(() => {
     loadStats();
@@ -50,9 +48,7 @@ export default function SettingsScreen() {
 
   const loadUser = async () => {
     const username = await getUsername();
-    const avatar = await getUserAvatar();
     setCurrentUsername(username);
-    setCurrentAvatar(avatar);
   };
 
   const handleClearData = () => {
@@ -74,8 +70,77 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleExportData = () => {
-    Alert.alert("Export", "Export functionality coming soon");
+  const handleExportData = async () => {
+    if (exportStep !== "idle") return;
+    setExportStep("preparing");
+    try {
+      setExportStep("packing");
+      const result = await exportData();
+      if (result.success) {
+        setExportStep("sharing");
+        setTimeout(() => {
+          setExportStep("done");
+          setTimeout(() => setExportStep("idle"), 2000);
+        }, 1000);
+      } else {
+        setExportStep("error");
+        setTimeout(() => setExportStep("idle"), 2000);
+      }
+    } catch {
+      setExportStep("error");
+      setTimeout(() => setExportStep("idle"), 2000);
+    }
+  };
+
+  const handleImportData = async () => {
+    if (importStep !== "idle") return;
+    Alert.alert(
+      "Import Data",
+      "This will add bookmarks from a backup file. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Import",
+          onPress: async () => {
+            setImportStep("selecting");
+            try {
+              setImportStep("extracting");
+              const result = await importData();
+              setImportStep("importing");
+              await loadStats();
+              setImportResult({ total: result.total, added: result.added, skipped: result.skipped });
+              setImportStep("done");
+              setTimeout(() => setImportStep("idle"), 3000);
+            } catch {
+              setImportStep("error");
+              setTimeout(() => setImportStep("idle"), 2000);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const getExportLabel = () => {
+    switch (exportStep) {
+      case "preparing": return "Preparing...";
+      case "packing": return "Packing files...";
+      case "sharing": return "Opening share...";
+      case "done": return "Export complete!";
+      case "error": return "Export failed";
+      default: return "Export Data";
+    }
+  };
+
+  const getImportLabel = () => {
+    switch (importStep) {
+      case "selecting": return "Selecting file...";
+      case "extracting": return "Extracting archive...";
+      case "importing": return "Importing data...";
+      case "done": return "Import complete!";
+      case "error": return "Import failed";
+      default: return "Import Data";
+    }
   };
 
   const handleLogout = () => {
@@ -239,9 +304,35 @@ export default function SettingsScreen() {
         >
           {renderSettingItem(
             "download-outline",
-            "Export Data",
-            "Export your bookmarks as JSON",
-            handleExportData,
+            getExportLabel(),
+            exportStep === "idle" ? "Export your bookmarks as ZIP" : 
+              exportStep === "done" ? "Export successful!" :
+              exportStep === "error" ? "Something went wrong" :
+              "Please wait...",
+            exportStep === "idle" ? handleExportData : undefined,
+            (exportStep === "preparing" || exportStep === "packing" || exportStep === "sharing") ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : exportStep === "done" ? (
+              <Ionicons name="checkmark-circle" size={22} color="#22c55e" />
+            ) : exportStep === "error" ? (
+              <Ionicons name="close-circle" size={22} color="#ef4444" />
+            ) : undefined,
+          )}
+          {renderSettingItem(
+            "cloud-upload-outline",
+            getImportLabel(),
+            importStep === "idle" ? "Import from backup file" : 
+              importStep === "done" ? `Added ${importResult?.added || 0} bookmarks` :
+              importStep === "error" ? "Something went wrong" :
+              "Please wait...",
+            importStep === "idle" ? handleImportData : undefined,
+            (importStep === "selecting" || importStep === "extracting" || importStep === "importing") ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : importStep === "done" ? (
+              <Ionicons name="checkmark-circle" size={22} color="#22c55e" />
+            ) : importStep === "error" ? (
+              <Ionicons name="close-circle" size={22} color="#ef4444" />
+            ) : undefined,
           )}
           {renderSettingItem(
             "trash-outline",

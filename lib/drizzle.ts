@@ -18,7 +18,9 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
       created_at INTEGER,
       updated_at INTEGER,
       synced_at INTEGER,
-      is_deleted INTEGER DEFAULT 0
+      is_deleted INTEGER DEFAULT 0,
+      is_favorite INTEGER DEFAULT 0,
+      local_path TEXT
     )
   `;
 
@@ -48,8 +50,9 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
   ];
 
   const createFtsTable = `
-    CREATE VIRTUAL TABLE IF NOT EXISTS bookmarks_fts USING fts5(
-      rowid,
+    DROP TABLE IF EXISTS bookmarks_fts;
+    CREATE VIRTUAL TABLE bookmarks_fts USING fts5(
+      bookmark_id,
       title,
       description,
       tags,
@@ -60,16 +63,16 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
 
   const createFtsTriggers = [
     `CREATE TRIGGER IF NOT EXISTS bookmarks_ai AFTER INSERT ON bookmarks BEGIN
-       INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
-       VALUES (NEW.rowid, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
+       INSERT INTO bookmarks_fts(bookmark_id, title, description, tags, domain, is_favorite)
+       VALUES (NEW.id, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
      END`,
     `CREATE TRIGGER IF NOT EXISTS bookmarks_ad AFTER DELETE ON bookmarks BEGIN
-       DELETE FROM bookmarks_fts WHERE rowid = OLD.rowid;
+       DELETE FROM bookmarks_fts WHERE bookmark_id = OLD.id;
      END`,
     `CREATE TRIGGER IF NOT EXISTS bookmarks_au AFTER UPDATE ON bookmarks BEGIN
-       DELETE FROM bookmarks_fts WHERE rowid = OLD.rowid;
-       INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
-       VALUES (NEW.rowid, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
+       DELETE FROM bookmarks_fts WHERE bookmark_id = OLD.id;
+       INSERT INTO bookmarks_fts(bookmark_id, title, description, tags, domain, is_favorite)
+       VALUES (NEW.id, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
      END`,
   ];
 
@@ -82,11 +85,13 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
     // Populate FTS table with existing data
     try {
       await database.execAsync(`
-        INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
-        SELECT rowid, title, description, tags, domain, is_favorite FROM bookmarks
+        INSERT INTO bookmarks_fts(bookmark_id, title, description, tags, domain, is_favorite)
+        SELECT id, title, description, tags, domain, COALESCE(is_favorite, 0) FROM bookmarks
         WHERE title IS NOT NULL OR description IS NOT NULL OR tags IS NOT NULL OR domain IS NOT NULL
       `);
-    } catch {}
+    } catch (e) {
+      console.log('FTS population skipped:', e);
+    }
 
     for (const trigger of createFtsTriggers) {
       try {
@@ -112,7 +117,7 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
     } catch {}
     try {
       await database.execAsync(
-        `ALTER TABLE bookmarks ADD COLUMN is_favorite INTEGER DEFAULT 0`,
+        `ALTER TABLE bookmarks ADD COLUMN is_deleted INTEGER DEFAULT 0`,
       );
     } catch {}
 
