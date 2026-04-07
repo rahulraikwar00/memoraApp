@@ -35,8 +35,11 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   play: async (bookmarkId: string, title: string, audioUri: string) => {
     const { player, stop } = get();
 
+    console.log('useAudioStore: play() called with:', { bookmarkId, title, audioUri });
+
     // If same track, just resume
     if (get().currentlyPlayingId === bookmarkId && player) {
+      console.log('useAudioStore: Same track, resuming');
       player.play();
       set({ isPlaying: true, isMinimized: false, showPlayer: true });
       return;
@@ -44,6 +47,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
     // Stop existing if any
     if (player) {
+      console.log('useAudioStore: Stopping existing player');
       stop();
     }
 
@@ -68,6 +72,12 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
       // Setup listeners
       newPlayer.addListener('playbackStatusUpdate', (status) => {
+        console.log('useAudioStore: Playback status update:', { 
+          playing: status.playing, 
+          currentTime: status.currentTime, 
+          duration: status.duration,
+          isLoaded: status.isLoaded
+        });
         set({ 
           isPlaying: status.playing,
           position: status.currentTime,
@@ -81,6 +91,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
       // Start playback
       newPlayer.play();
+      console.log('useAudioStore: play() called on player');
 
     } catch (err) {
       console.error('useAudioStore: Playback error:', err);

@@ -54,6 +54,23 @@ const CARD_HEIGHTS = {
   link: 120,
 };
 
+const formatTimestamp = (timestamp: number) => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+};
+
 export default function GridBookmarkCard({
   bookmark,
   onPress,
@@ -86,9 +103,10 @@ export default function GridBookmarkCard({
   const contentType = getContentType(bookmark);
   const CARD_HEIGHT = CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
 
-  const { currentlyPlayingId, isPlaying: globalIsPlaying } = useAudioStore();
+  const { currentlyPlayingId, isPlaying: globalIsPlaying, position, duration, seekTo } = useAudioStore();
   const isCurrentlyPlaying = currentlyPlayingId === bookmark.id;
   const isPlaying = isCurrentlyPlaying && globalIsPlaying;
+  const isThisPlaying = currentlyPlayingId === bookmark.id;
 
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -246,6 +264,11 @@ export default function GridBookmarkCard({
             >
               {contentType === 'link' ? domain : getContentLabel(contentType)}
             </Text>
+            <View style={styles.timestampContainer}>
+              <Text style={[styles.timestamp, { color: colors.textTertiary }]}>
+                {formatTimestamp(bookmark.created_at)}
+              </Text>
+            </View>
             {variant === 'feed' && showShareInHeader && onShare && (
               <Pressable
                 style={styles.headerShareButton}
@@ -287,6 +310,31 @@ export default function GridBookmarkCard({
               {bookmark.title || bookmark.url || 'Untitled'}
             </Text>
           </View>
+
+          {contentType === 'voice' && isThisPlaying && duration > 0 && (
+            <View 
+              style={[styles.progressBarContainer, { marginTop: spacing.xs }]}
+              onStartShouldSetResponder={() => true}
+              onResponderGrant={(e) => {
+                const { locationX } = e.nativeEvent;
+                const barWidth = CARD_WIDTH - spacing.sm * 2;
+                const newPosition = (locationX / barWidth) * duration;
+                seekTo(Math.max(0, Math.min(duration, newPosition)));
+              }}
+            >
+              <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
+                <View 
+                  style={[
+                    styles.progressBarFill, 
+                    { 
+                      width: `${(position / duration) * 100}%`, 
+                      backgroundColor: colors.accent 
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+          )}
 
           {tags.length > 0 && contentType !== 'voice' && (
             <View style={[styles.tags, { gap: spacing.xs }]}>
@@ -489,5 +537,26 @@ const styles = StyleSheet.create({
   },
   voteButton: {
     padding: 2,
+  },
+  progressBarContainer: {
+    height: 20,
+    justifyContent: 'center',
+  },
+  progressBarBg: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  timestampContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  timestamp: {
+    fontSize: 10,
+    fontWeight: '400',
   },
 });
