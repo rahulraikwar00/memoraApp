@@ -288,18 +288,56 @@ export default function SaveScreen() {
           setIsLoading(false);
           return;
         }
+        if (!isValidUrl(url)) {
+          Alert.alert('Error', 'Please enter a valid URL');
+          setIsLoading(false);
+          return;
+        }
+
+        const { getBookmarks } = await import('../../lib/db');
+        const existingBookmarks = await getBookmarks();
+        const normalizedUrl = url.trim().toLowerCase();
+        const hasDuplicate = existingBookmarks.some(b => 
+          b.url && b.url.toLowerCase() === normalizedUrl
+        );
         
-        const domain = metadata?.domain || new URL(url).hostname;
-        await addBookmark({
-          url: url.trim(),
-          title: metadata?.title || url,
-          description: metadata?.description || null,
-          image_url: metadata?.image_url || null,
-          domain,
-          tags: JSON.stringify(tags),
-          is_public: isPublic ? 1 : 0,
-          local_path: null,
-        });
+        if (hasDuplicate) {
+          Alert.alert('Duplicate URL', 'This URL is already saved. Do you want to save it anyway?', [
+            { text: 'Cancel', style: 'cancel', onPress: () => setIsLoading(false) },
+            { text: 'Save Anyway', onPress: () => proceedWithSave() }
+          ]);
+          return;
+        }
+
+        async function proceedWithSave() {
+          const domain = metadata?.domain || new URL(url).hostname;
+          await addBookmark({
+            url: url.trim(),
+            title: metadata?.title || url,
+            description: metadata?.description || null,
+            image_url: metadata?.image_url || null,
+            domain,
+            tags: JSON.stringify(tags),
+            is_public: isPublic ? 1 : 0,
+            local_path: null,
+          });
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setUrl('');
+          setNoteText('');
+          setTags([]);
+          setMetadata(null);
+          setIsPublic(false);
+          setSelectedImage(null);
+          setRecordedAudioUri(null);
+          setRecordingDuration(0);
+          Alert.alert('Saved!', 'Content saved successfully', [
+            { text: 'OK', onPress: () => router.push('/(tabs)') }
+          ]);
+          setIsLoading(false);
+          return true;
+        }
+        const saved = await proceedWithSave();
+        if (saved) return;
       } else if (contentType === 'image') {
         if (!selectedImage) {
           Alert.alert('Error', 'Please select an image');

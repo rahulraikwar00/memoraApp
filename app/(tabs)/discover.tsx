@@ -26,7 +26,9 @@ export default function DiscoverScreen() {
       const data: FeedResponse = await feedApi.getFeed([], 50);
       const allItems = [...(data.trending || []), ...(data.recent || [])];
       const unique = Array.from(new Map(allItems.map(i => [i.id, i])).values());
-      const filtered = unique.filter(item => item.url); // Relax filter to URLs only, allow recommendations based on tags
+      // Also deduplicate by URL to prevent same content appearing multiple times
+      const urlUnique = Array.from(new Map(unique.map(i => [i.url?.toLowerCase(), i])).values());
+      const filtered = urlUnique.filter(item => item.url);
       setFeed(filtered);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';

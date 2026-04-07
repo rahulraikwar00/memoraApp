@@ -169,7 +169,7 @@ export class SqliteProvider implements DatabaseProvider {
 
   // Feed
   getFeedByTags(tags: string[], limit: number): BookmarkRow[] {
-    return db.select()
+    return db.selectDistinct()
       .from(withTags)
       .innerJoin(bookmarkTags, eq(withTags.id, bookmarkTags.bookmarkId))
       .where(inArray(bookmarkTags.tag, tags))

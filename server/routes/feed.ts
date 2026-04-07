@@ -35,7 +35,7 @@ router.get("/", (req: Request, res: Response) => {
     const tagList = feedTags.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
     if (tagList.length > 0) {
       trending = dbProvider.getFeedByTags(tagList, limitNum);
-      recent = trending; // personalized feed combines both
+      recent = trending;
     } else {
       trending = dbProvider.getFeedTrending(limitNum);
       recent = dbProvider.getFeedRecent(limitNum);
@@ -45,7 +45,17 @@ router.get("/", (req: Request, res: Response) => {
     recent = dbProvider.getFeedRecent(limitNum);
   }
 
-  res.json({ trending, recent });
+  // Deduplicate by URL across trending and recent
+  const seen = new Set<string>();
+  const deduped: BookmarkRow[] = [];
+  for (const item of [...trending, ...recent]) {
+    if (item.url && !seen.has(item.url.toLowerCase())) {
+      seen.add(item.url.toLowerCase());
+      deduped.push(item);
+    }
+  }
+
+  res.json({ trending: deduped, recent: deduped });
 });
 
 router.post("/report", (req: Request, res: Response) => {
