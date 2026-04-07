@@ -15,7 +15,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -25,6 +25,7 @@ import { useThemeStore } from '../../stores/useThemeStore';
 import { generateTags } from '../../lib/tagger';
 import { metadataApi } from '../../lib/api';
 import TagChip from '../../components/TagChip';
+import Toast from '../../components/Toast';
 
 interface Metadata {
   title?: string;
@@ -44,11 +45,14 @@ export default function SaveScreen() {
   
   const [contentType, setContentType] = useState<ContentType>('link');
   const [url, setUrl] = useState('');
+  const [customTitle, setCustomTitle] = useState('');
   const [noteText, setNoteText] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [isPublic, setIsPublic] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [metadata, setMetadata] = useState<Metadata | null>(null);
+  const [toast, setToast] = useState<{ visible: boolean; type: 'success' | 'error' | 'warning' | 'info'; message: string }>({ visible: false, type: 'info', message: '' });
   
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
@@ -59,6 +63,11 @@ export default function SaveScreen() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scale = useSharedValue(1);
+
+  const showToast = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
+    setToast({ visible: true, type, message });
+    setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+  };
 
   useEffect(() => {
     checkClipboard();
@@ -124,11 +133,11 @@ export default function SaveScreen() {
 
   const handleUrlSubmit = async () => {
     if (!url.trim()) {
-      Alert.alert('Error', 'Please enter a URL');
+      showToast('error', 'Please enter a URL');
       return;
     }
     if (!isValidUrl(url)) {
-      Alert.alert('Error', 'Please enter a valid URL');
+      showToast('error', 'Please enter a valid URL');
       return;
     }
     setIsLoading(true);
@@ -139,7 +148,7 @@ export default function SaveScreen() {
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photo library');
+      showToast('error', 'Please allow access to your photo library');
       return;
     }
 
@@ -159,7 +168,7 @@ export default function SaveScreen() {
   const takePhoto = async () => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your camera');
+      showToast('error', 'Please allow access to your camera');
       return;
     }
 
@@ -192,9 +201,9 @@ export default function SaveScreen() {
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
-        Alert.alert('Permission Required', 'Please allow microphone access');
-        return;
-      }
+      showToast('error', 'Please allow microphone access');
+      return;
+    }
 
       await setAudioModeAsync({
         allowsRecording: true,
@@ -218,7 +227,7 @@ export default function SaveScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {
       console.log('Failed to start recording:', e);
-      Alert.alert('Error', 'Failed to start recording');
+      showToast('error', 'Failed to start recording');
     }
   };
 
@@ -284,89 +293,119 @@ export default function SaveScreen() {
 
       if (contentType === 'link') {
         if (!url.trim()) {
-          Alert.alert('Error', 'Please enter a URL');
+          showToast('error', 'Please enter a URL');
           setIsLoading(false);
           return;
         }
         if (!isValidUrl(url)) {
-          Alert.alert('Error', 'Please enter a valid URL');
+          showToast('error', 'Please enter a valid URL');
           setIsLoading(false);
           return;
         }
 
-        const { getBookmarks } = await import('../../lib/db');
-        const existingBookmarks = await getBookmarks();
+        const existingBookmarks = useBookmarkStore.getState().bookmarks;
         const normalizedUrl = url.trim().toLowerCase();
         const hasDuplicate = existingBookmarks.some(b => 
           b.url && b.url.toLowerCase() === normalizedUrl
         );
         
         if (hasDuplicate) {
-          Alert.alert('Duplicate URL', 'This URL is already saved. Do you want to save it anyway?', [
-            { text: 'Cancel', style: 'cancel', onPress: () => setIsLoading(false) },
-            { text: 'Save Anyway', onPress: () => proceedWithSave() }
-          ]);
+          showToast('warning', 'This URL is already saved');
+          setIsLoading(false);
           return;
         }
 
-        async function proceedWithSave() {
-          const domain = metadata?.domain || new URL(url).hostname;
-          await addBookmark({
-            url: url.trim(),
-            title: metadata?.title || url,
-            description: metadata?.description || null,
-            image_url: metadata?.image_url || null,
-            domain,
-            tags: JSON.stringify(tags),
-            is_public: isPublic ? 1 : 0,
-            local_path: null,
-          });
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setUrl('');
-          setNoteText('');
-          setTags([]);
-          setMetadata(null);
-          setIsPublic(false);
-          setSelectedImage(null);
-          setRecordedAudioUri(null);
-          setRecordingDuration(0);
-          Alert.alert('Saved!', 'Content saved successfully', [
-            { text: 'OK', onPress: () => router.push('/(tabs)') }
-          ]);
-          setIsLoading(false);
-          return true;
-        }
-        const saved = await proceedWithSave();
-        if (saved) return;
-      } else if (contentType === 'image') {
-        if (!selectedImage) {
-          Alert.alert('Error', 'Please select an image');
-          setIsLoading(false);
-          return;
-        }
-        
-        localPath = await saveImageToLocal(selectedImage);
-        
+        const domain = metadata?.domain || new URL(url).hostname;
+
+        fetchMetadata(url).catch(() => {});
+
         await addBookmark({
-          url: '',
-          title: noteText || 'Photo',
-          description: null,
-          image_url: localPath,
-          domain: 'local-image',
+          url: url.trim(),
+          title: customTitle.trim() || metadata?.title || url,
+          description: metadata?.description || null,
+          image_url: metadata?.image_url || null,
+          domain,
           tags: JSON.stringify(tags),
           is_public: isPublic ? 1 : 0,
-          local_path: localPath,
+          local_path: null,
         });
-      } else if (contentType === 'note') {
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUrl('');
+        setCustomTitle('');
+        setNoteText('');
+        setNoteTitle('');
+        setTags([]);
+        setMetadata(null);
+        setIsPublic(false);
+        setSelectedImage(null);
+        setRecordedAudioUri(null);
+        setRecordingDuration(0);
+        showToast('success', 'Link saved successfully');
+        router.push('/(tabs)');
+        setIsLoading(false);
+      } 
+      
+      if (contentType === 'image') {
+        if (!selectedImage) {
+          showToast('error', 'Please select an image');
+          setIsLoading(false);
+          return;
+        }
+        
+        try {
+          localPath = await saveImageToLocal(selectedImage);
+        } catch (err) {
+          console.log('saveImageToLocal error:', err);
+          showToast('error', 'Failed to save image');
+          setIsLoading(false);
+          return;
+        }
+
+        try {
+          await addBookmark({
+            url: '',
+            title: customTitle.trim() || noteText || 'Photo',
+            description: null,
+            image_url: localPath,
+            domain: 'local-image',
+            tags: JSON.stringify(tags),
+            is_public: isPublic ? 1 : 0,
+            local_path: localPath,
+          });
+        } catch (err) {
+          console.log('addBookmark error:', err);
+          showToast('error', 'Failed to save to database');
+          setIsLoading(false);
+          return;
+        }
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUrl('');
+        setCustomTitle('');
+        setNoteText('');
+        setNoteTitle('');
+        setTags([]);
+        setMetadata(null);
+        setIsPublic(false);
+        setSelectedImage(null);
+        setRecordedAudioUri(null);
+        setRecordingDuration(0);
+        showToast('success', 'Image saved successfully');
+        router.push('/(tabs)');
+        setIsLoading(false);
+      } 
+      
+      if (contentType === 'note') {
         if (!noteText.trim()) {
-          Alert.alert('Error', 'Please enter some text');
+          showToast('error', 'Please enter some text');
           setIsLoading(false);
           return;
         }
         
         await addBookmark({
           url: '',
-          title: noteText.substring(0, 50) + (noteText.length > 50 ? '...' : ''),
+          title: noteTitle.trim() || noteText.substring(0, 50) + (noteText.length > 50 ? '...' : ''),
           description: noteText,
           image_url: null,
           domain: 'local-note',
@@ -374,16 +413,33 @@ export default function SaveScreen() {
           is_public: isPublic ? 1 : 0,
           local_path: null,
         });
-      } else if (contentType === 'voice') {
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUrl('');
+        setCustomTitle('');
+        setNoteText('');
+        setNoteTitle('');
+        setTags([]);
+        setMetadata(null);
+        setIsPublic(false);
+        setSelectedImage(null);
+        setRecordedAudioUri(null);
+        setRecordingDuration(0);
+        showToast('success', 'Note saved successfully');
+        router.push('/(tabs)');
+        setIsLoading(false);
+      }
+      
+      if (contentType === 'voice') {
         if (!recordedAudioUri) {
-          Alert.alert('Error', 'Please record something first');
+          showToast('error', 'Please record something first');
           setIsLoading(false);
           return;
         }
         
         await addBookmark({
           url: '',
-          title: `Voice Note (${formatDuration(recordingDuration)})`,
+          title: customTitle.trim() || `Voice Note (${formatDuration(recordingDuration)})`,
           description: null,
           image_url: null,
           domain: 'local-voice',
@@ -391,24 +447,24 @@ export default function SaveScreen() {
           is_public: isPublic ? 1 : 0,
           local_path: recordedAudioUri,
         });
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUrl('');
+        setCustomTitle('');
+        setNoteText('');
+        setNoteTitle('');
+        setTags([]);
+        setMetadata(null);
+        setIsPublic(false);
+        setSelectedImage(null);
+        setRecordedAudioUri(null);
+        setRecordingDuration(0);
+        showToast('success', 'Voice note saved successfully');
+        router.push('/(tabs)');
+        setIsLoading(false);
       }
-
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      setUrl('');
-      setNoteText('');
-      setTags([]);
-      setMetadata(null);
-      setIsPublic(false);
-      setSelectedImage(null);
-      setRecordedAudioUri(null);
-      setRecordingDuration(0);
-
-      Alert.alert('Saved!', 'Content saved successfully', [
-        { text: 'OK', onPress: () => router.push('/(tabs)') }
-      ]);
     } catch {
-      Alert.alert('Error', 'Failed to save');
+      showToast('error', 'Failed to save');
     } finally {
       setIsLoading(false);
     }
@@ -450,7 +506,7 @@ export default function SaveScreen() {
       case 'link':
         return (
           <View style={[styles.inputContainer, { marginBottom: spacing.xxl }]}>
-            <View style={[styles.urlInputWrapper, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md }]}>
+            <View style={[styles.urlInputWrapper, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, marginBottom: spacing.md }]}>
               <TextInput
                 style={[styles.urlInput, { color: colors.textPrimary }]}
                 value={url}
@@ -460,8 +516,8 @@ export default function SaveScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
-                onSubmitEditing={handleUrlSubmit}
-                returnKeyType="go"
+                onSubmitEditing={() => handleSave()}
+                returnKeyType="done"
               />
               <Pressable 
                 style={styles.pasteButton}
@@ -471,15 +527,22 @@ export default function SaveScreen() {
               </Pressable>
             </View>
 
-            <Pressable 
-              style={[styles.fetchButton, { backgroundColor: colors.accent }]}
-              onPress={handleUrlSubmit}
-              disabled={isLoading || !url.trim()}
-            >
-              <Text style={styles.fetchButtonText}>
-                {isLoading ? 'Fetching...' : 'Fetch Info'}
-              </Text>
-            </Pressable>
+            <TextInput
+              style={[styles.titleInput, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, color: colors.textPrimary }]}
+              value={customTitle}
+              onChangeText={setCustomTitle}
+              placeholder="Custom title (optional)"
+              placeholderTextColor={colors.textTertiary}
+            />
+
+            {metadata && (
+              <View style={[styles.miniPreview, { backgroundColor: colors.elevated, marginTop: spacing.md }]}>
+                <Text style={[styles.miniPreviewDomain, { color: colors.textTertiary }]}>{metadata.domain}</Text>
+                <Text style={[styles.miniPreviewTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {metadata.title || url}
+                </Text>
+              </View>
+            )}
           </View>
         );
 
@@ -514,12 +577,28 @@ export default function SaveScreen() {
                 </Pressable>
               </View>
             )}
+            {selectedImage && (
+              <TextInput
+                style={[styles.titleInput, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, color: colors.textPrimary, marginTop: spacing.md }]}
+                value={customTitle}
+                onChangeText={setCustomTitle}
+                placeholder="Custom title (optional)"
+                placeholderTextColor={colors.textTertiary}
+              />
+            )}
           </View>
         );
 
       case 'note':
         return (
           <View style={[styles.inputContainer, { marginBottom: spacing.xxl }]}>
+            <TextInput
+              style={[styles.titleInput, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, color: colors.textPrimary, marginBottom: spacing.md }]}
+              value={noteTitle}
+              onChangeText={setNoteTitle}
+              placeholder="Title (optional)"
+              placeholderTextColor={colors.textTertiary}
+            />
             <TextInput
               style={[styles.noteInput, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, color: colors.textPrimary }]}
               value={noteText}
@@ -536,6 +615,15 @@ export default function SaveScreen() {
       case 'voice':
         return (
           <View style={[styles.inputContainer, { marginBottom: spacing.xxl }]}>
+            {recordedAudioUri && (
+              <TextInput
+                style={[styles.titleInput, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md, color: colors.textPrimary, marginBottom: spacing.md }]}
+                value={customTitle}
+                onChangeText={setCustomTitle}
+                placeholder="Custom title (optional)"
+                placeholderTextColor={colors.textTertiary}
+              />
+            )}
             <View style={[styles.recorderContainer, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md }]}>
               {recordedAudioUri ? (
                 <View style={styles.recordedContainer}>
@@ -699,6 +787,12 @@ export default function SaveScreen() {
           )}
         </AnimatedPressable>
       </ScrollView>
+      <Toast 
+        visible={toast.visible} 
+        type={toast.type} 
+        message={toast.message} 
+        onClose={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -743,6 +837,23 @@ const styles = StyleSheet.create({
   },
   pasteButton: {
     padding: 12,
+  },
+  titleInput: {
+    fontSize: 15,
+    padding: 12,
+    borderWidth: 1,
+  },
+  miniPreview: {
+    padding: 12,
+    borderRadius: 8,
+  },
+  miniPreviewDomain: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  miniPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   fetchButton: {
     borderRadius: 12,
