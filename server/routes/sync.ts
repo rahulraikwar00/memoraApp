@@ -1,6 +1,6 @@
-import { Router, Request, Response } from "express";
-import { z } from "zod";
 import crypto from "crypto";
+import { Request, Response, Router } from "express";
+import { z } from "zod";
 import { dbProvider } from "../db/database.js";
 
 const syncBookmarkSchema = z.object({
@@ -8,7 +8,10 @@ const syncBookmarkSchema = z.object({
   url: z.string().optional().nullable(),
   title: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  tags: z.union([z.string(), z.array(z.string())]).optional().nullable(),
+  tags: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .nullable(),
   created_at: z.number().optional().nullable(),
 });
 
@@ -34,8 +37,13 @@ router.post("/", (req: Request, res: Response) => {
 
   const parsed = syncSchema.safeParse(req.body);
   if (!parsed.success) {
-    console.log(`[SYNC][${username}] ERROR: Invalid payload`, parsed.error.issues);
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    console.log(
+      `[SYNC][${username}] ERROR: Invalid payload`,
+      parsed.error.issues,
+    );
+    return res
+      .status(400)
+      .json({ error: "Invalid payload", details: parsed.error.issues });
   }
 
   const { bookmarks: incoming } = parsed.data;
@@ -59,6 +67,8 @@ router.post("/", (req: Request, res: Response) => {
         url: urlStr,
         title: bm.title || null,
         description: bm.description || null,
+        image_url: null,
+        domain: null,
         createdAt: bm.created_at || Date.now(),
       });
 
@@ -71,9 +81,10 @@ router.post("/", (req: Request, res: Response) => {
       }
 
       // 3. Tags
-      const tagsArr = typeof bm.tags === "string"
-        ? JSON.parse(bm.tags || "[]")
-        : (bm.tags || []);
+      const tagsArr =
+        typeof bm.tags === "string"
+          ? JSON.parse(bm.tags || "[]")
+          : bm.tags || [];
 
       if (Array.isArray(tagsArr)) {
         for (const tag of tagsArr) {
