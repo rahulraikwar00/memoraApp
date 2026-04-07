@@ -1,6 +1,7 @@
 import { getDb } from "./drizzle";
 import { bookmarks, syncQueue, userTags } from "./schema";
 import { eq, desc, sql, or, like, notInArray, and } from "drizzle-orm";
+import * as SQLite from "expo-sqlite";
 
 // Re-export types for backwards compatibility
 export interface Bookmark {
@@ -43,36 +44,46 @@ export async function searchBookmarks(query: string): Promise<Bookmark[]> {
   const db = await getDb();
   if (!query.trim()) return getBookmarks();
 
-  const searchTerm = `%${query.toLowerCase()}%`;
+  const searchTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+  const expoDb = (db as any).$client as SQLite.SQLiteDatabase;
+  
+  // First try FTS5 search
+  try {
+    const ftsQuery = searchTerms.map(term => `"${term}"*`).join(' OR ');
+    
+    const results = await expoDb.getAllAsync<Bookmark>(`
+      SELECT b.* FROM bookmarks b
+      INNER JOIN bookmarks_fts fts ON b.rowid = fts.rowid
+      WHERE b.is_deleted = 0 AND bookmarks_fts MATCH ?
+      ORDER BY b.created_at DESC
+    `, [ftsQuery]);
 
-  return db.select({
-    id: bookmarks.id,
-    url: bookmarks.url,
-    title: bookmarks.title,
-    description: bookmarks.description,
-    image_url: bookmarks.imageUrl,
-    domain: bookmarks.domain,
-    tags: bookmarks.tags,
-    is_public: bookmarks.isPublic,
-    is_favorite: bookmarks.isFavorite,
-    local_path: bookmarks.localPath,
-    created_at: bookmarks.createdAt,
-    updated_at: bookmarks.updatedAt,
-    synced_at: bookmarks.syncedAt,
-    is_deleted: bookmarks.isDeleted,
-  })
-  .from(bookmarks)
-  .where(and(
-    eq(bookmarks.isDeleted, 0),
-    or(
-      like(sql`LOWER(${bookmarks.title})`, searchTerm),
-      like(sql`LOWER(${bookmarks.description})`, searchTerm),
-      like(sql`LOWER(${bookmarks.tags})`, searchTerm),
-      like(sql`LOWER(${bookmarks.domain})`, searchTerm)
-    )
-  ))
-  .orderBy(desc(bookmarks.createdAt))
-  .all() as unknown as Bookmark[];
+    if (results.length > 0) {
+      return results;
+    }
+  } catch (error) {
+    console.log('FTS search failed, trying LIKE fallback:', error);
+  }
+
+  // Fallback to LIKE search using direct SQLite
+  const searchTerm = `%${query.toLowerCase()}%`;
+  try {
+    const results = await expoDb.getAllAsync<Bookmark>(
+      `SELECT * FROM bookmarks 
+       WHERE is_deleted = 0 AND (
+         LOWER(title) LIKE ? OR 
+         LOWER(description) LIKE ? OR 
+         LOWER(tags) LIKE ? OR 
+         LOWER(domain) LIKE ?
+       )
+       ORDER BY created_at DESC`,
+      [searchTerm, searchTerm, searchTerm, searchTerm],
+    );
+    return results;
+  } catch (error) {
+    console.error('Search failed completely:', error);
+    return [];
+  }
 }
 
 export async function getBookmarks(): Promise<Bookmark[]> {
@@ -327,57 +338,35 @@ export async function updateUserTags(tags: string): Promise<void> {
 
 export async function getUserTopTags(limit: number = 10): Promise<UserTag[]> {
   const db = await getDb();
+  const expoDb = (db as any).$client as SQLite.SQLiteDatabase;
 
-  return db.select({
-    tag: userTags.tag,
-    count: userTags.count,
-    last_used: userTags.lastUsed,
-  })
-  .from(userTags)
-  .orderBy(desc(userTags.count))
-  .limit(limit)
-  .all() as unknown as UserTag[];
+  return expoDb.getAllAsync<UserTag>(
+    `SELECT tag, count, last_used FROM user_tags ORDER BY count DESC LIMIT ?`,
+    [limit],
+  );
 }
 
 export async function getDiscoverFeed(userTags: string[]): Promise<Bookmark[]> {
   const db = await getDb();
-
-  const baseQuery = db.select({
-    id: bookmarks.id,
-    url: bookmarks.url,
-    title: bookmarks.title,
-    description: bookmarks.description,
-    image_url: bookmarks.imageUrl,
-    domain: bookmarks.domain,
-    tags: bookmarks.tags,
-    is_public: bookmarks.isPublic,
-    is_favorite: bookmarks.isFavorite,
-    local_path: bookmarks.localPath,
-    created_at: bookmarks.createdAt,
-    updated_at: bookmarks.updatedAt,
-    synced_at: bookmarks.syncedAt,
-    is_deleted: bookmarks.isDeleted,
-  })
-  .from(bookmarks)
-  .where(and(
-    eq(bookmarks.isDeleted, 0),
-    notInArray(bookmarks.domain, ['local-image', 'local-note', 'local-voice'])
-  ));
+  const expoDb = (db as any).$client as SQLite.SQLiteDatabase;
 
   if (userTags.length === 0) {
-    return baseQuery
-      .orderBy(desc(bookmarks.createdAt))
-      .limit(50)
-      .all() as unknown as Bookmark[];
+    return expoDb.getAllAsync<Bookmark>(
+      `SELECT * FROM bookmarks 
+       WHERE is_deleted = 0 AND domain NOT IN ('local-image', 'local-note', 'local-voice')
+       ORDER BY created_at DESC LIMIT 50`,
+    );
   }
 
-  const placeholders = userTags.filter(Boolean).map(tag =>
-    like(sql`LOWER(${bookmarks.tags})`, `%${tag.toLowerCase()}%`)
-  );
+  const placeholders = userTags.filter(Boolean).map(() => `LOWER(tags) LIKE ?`).join(" OR ");
+  const params = userTags.filter(Boolean).map((tag) => `%${tag.toLowerCase()}%`);
 
-  return baseQuery
-    .where(or(...placeholders))
-    .orderBy(desc(bookmarks.createdAt))
-    .limit(50)
-    .all() as unknown as Bookmark[];
+  return expoDb.getAllAsync<Bookmark>(
+    `SELECT * FROM bookmarks 
+     WHERE is_deleted = 0 
+     AND domain NOT IN ('local-image', 'local-note', 'local-voice')
+     AND (${placeholders})
+     ORDER BY created_at DESC LIMIT 50`,
+    params,
+  );
 }

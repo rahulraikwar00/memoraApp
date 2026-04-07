@@ -47,10 +47,52 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)`,
   ];
 
+  const createFtsTable = `
+    CREATE VIRTUAL TABLE IF NOT EXISTS bookmarks_fts USING fts5(
+      rowid,
+      title,
+      description,
+      tags,
+      domain,
+      is_favorite
+    )
+  `;
+
+  const createFtsTriggers = [
+    `CREATE TRIGGER IF NOT EXISTS bookmarks_ai AFTER INSERT ON bookmarks BEGIN
+       INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
+       VALUES (NEW.rowid, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS bookmarks_ad AFTER DELETE ON bookmarks BEGIN
+       DELETE FROM bookmarks_fts WHERE rowid = OLD.rowid;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS bookmarks_au AFTER UPDATE ON bookmarks BEGIN
+       DELETE FROM bookmarks_fts WHERE rowid = OLD.rowid;
+       INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
+       VALUES (NEW.rowid, NEW.title, NEW.description, NEW.tags, NEW.domain, NEW.is_favorite);
+     END`,
+  ];
+
   try {
     await database.execAsync(createBookmarks);
     await database.execAsync(createSyncQueue);
     await database.execAsync(createUserTags);
+    await database.execAsync(createFtsTable);
+
+    // Populate FTS table with existing data
+    try {
+      await database.execAsync(`
+        INSERT INTO bookmarks_fts(rowid, title, description, tags, domain, is_favorite)
+        SELECT rowid, title, description, tags, domain, is_favorite FROM bookmarks
+        WHERE title IS NOT NULL OR description IS NOT NULL OR tags IS NOT NULL OR domain IS NOT NULL
+      `);
+    } catch {}
+
+    for (const trigger of createFtsTriggers) {
+      try {
+        await database.execAsync(trigger);
+      } catch {}
+    }
 
     // Migrations
     try {
