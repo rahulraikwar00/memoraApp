@@ -145,6 +145,7 @@ export async function exportData(): Promise<{ success: boolean; uri?: string; er
 }
 
 export async function importData(): Promise<ImportResult> {
+  console.log("[IMPORT] Starting data import process...");
   try {
     const result = await DocumentPicker.getDocumentAsync({
       type: "application/zip",
@@ -152,25 +153,34 @@ export async function importData(): Promise<ImportResult> {
     });
 
     if (result.canceled || !result.assets || result.assets.length === 0) {
+      console.log("[IMPORT] Import cancelled by user");
       return { success: false, total: 0, added: 0, skipped: 0, replaced: 0, error: "No file selected" };
     }
 
     const fileUri = result.assets[0].uri;
+    console.log("[IMPORT] File selected:", fileUri);
+
     const response = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
+    console.log("[IMPORT] Zip file read into memory (Base64)");
 
     const zip = await JSZip.loadAsync(response, { base64: true });
+    console.log("[IMPORT] JSZip loaded successfully");
 
     const manifestFile = zip.file("manifest.json");
     if (!manifestFile) {
+      console.error("[IMPORT] Error: manifest.json not found in ZIP");
       return { success: false, total: 0, added: 0, skipped: 0, replaced: 0, error: "Invalid backup: no manifest.json" };
     }
 
     const manifestContent = await manifestFile.async("string");
+    console.log("[IMPORT] Manifest content read");
     const manifest: ExportManifest = JSON.parse(manifestContent);
+    console.log(`[IMPORT] Manifest parsed. Version: ${manifest.version}, Bookmarks: ${manifest.bookmarks?.length || 0}`);
 
     if (!manifest.bookmarks || !Array.isArray(manifest.bookmarks)) {
+      console.error("[IMPORT] Error: No bookmarks array in manifest");
       return { success: false, total: 0, added: 0, skipped: 0, replaced: 0, error: "Invalid manifest: no bookmarks" };
     }
 
@@ -186,20 +196,23 @@ export async function importData(): Promise<ImportResult> {
       await FileSystem.makeDirectoryAsync(voiceDir, { intermediates: true });
     }
 
-    const { addToSyncQueue } = await import("./db");
-    const { updateUserTags } = await import("./db");
+    const { createBookmark, updateUserTags } = await import("./db");
 
     let added = 0;
     let skipped = 0;
     let replaced = 0;
 
-    for (const bookmark of manifest.bookmarks) {
+    for (let i = 0; i < manifest.bookmarks.length; i++) {
+      const bookmark = manifest.bookmarks[i];
+      console.log(`[IMPORT] Processing bookmark ${i + 1}/${manifest.bookmarks.length}: ${bookmark.title || bookmark.url}`);
+      
       try {
         let localPath: string | null = null;
 
         if (bookmark.local_path) {
           const filename = bookmark.local_path.split("/").pop();
           if (!filename) {
+            console.warn(`[IMPORT] Skipping bookmark ${i + 1}: Could not determine filename from path ${bookmark.local_path}`);
             skipped++;
             continue;
           }
@@ -216,6 +229,9 @@ export async function importData(): Promise<ImportResult> {
                 encoding: FileSystem.EncodingType.Base64,
               });
               localPath = destPath;
+              console.log(`[IMPORT] Extracted image: ${filename}`);
+            } else {
+              console.warn(`[IMPORT] Image file not found in ZIP: images/${filename}`);
             }
           } else {
             const voiceFile = zip.file(`voice/${filename}`);
@@ -225,14 +241,15 @@ export async function importData(): Promise<ImportResult> {
                 encoding: FileSystem.EncodingType.Base64,
               });
               localPath = destPath;
+              console.log(`[IMPORT] Extracted voice: ${filename}`);
+            } else {
+              console.warn(`[IMPORT] Voice file not found in ZIP: voice/${filename}`);
             }
           }
         }
 
-        const newId = generateId();
-        const now = Date.now();
-
-        await addToSyncQueue("create", {
+        // Use createBookmark instead of just addToSyncQueue to ensure visibility in Library
+        await createBookmark({
           url: bookmark.url,
           title: bookmark.title,
           description: bookmark.description,
@@ -241,25 +258,17 @@ export async function importData(): Promise<ImportResult> {
           tags: bookmark.tags,
           is_public: bookmark.is_public,
           local_path: localPath,
-          id: newId,
-          created_at: now,
         });
 
-        if (bookmark.tags) {
-          try {
-            await updateUserTags(bookmark.tags);
-          } catch (e) {
-            console.log("Tag update error:", e);
-          }
-        }
-
+        console.log(`[IMPORT] Successfully imported: ${bookmark.title || bookmark.url}`);
         added++;
       } catch (err) {
-        console.error("Import bookmark error:", err);
+        console.error(`[IMPORT] Error importing bookmark ${i + 1}:`, err);
         skipped++;
       }
     }
 
+    console.log(`[IMPORT] Import finished. Added: ${added}, Skipped: ${skipped}`);
     return {
       success: true,
       total: manifest.bookmarks.length,
@@ -268,7 +277,7 @@ export async function importData(): Promise<ImportResult> {
       replaced,
     };
   } catch (error) {
-    console.error("Import error:", error);
+    console.error("[IMPORT] Fatal Import error:", error);
     return { success: false, total: 0, added: 0, skipped: 0, replaced: 0, error: String(error) };
   }
 }

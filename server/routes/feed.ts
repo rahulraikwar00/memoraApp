@@ -25,37 +25,26 @@ router.get("/", (req: Request, res: Response) => {
     }
   }
 
-  const limitNum = Math.min(parseInt(req.query.limit as string) || 50, 100);
-  console.log(`[FEED][${username}] Tags=${feedTags || "none"} Limit=${limitNum}`);
+  const limitNum = Math.min(parseInt(req.query.limit as string) || 30, 50);
+  console.log(`[FEED][${username}] Limit=${limitNum}`);
 
-  let trending: BookmarkRow[];
-  let recent: BookmarkRow[];
+  const heroItems = dbProvider.getFeedTrending(1);
+  const personalizedItems = dbProvider.getPersonalizedMix(tokenStr, 10);
+  const flashbackItems = dbProvider.getFlashbackBookmarks(tokenStr, 4);
+  const recentItems = dbProvider.getFeedRecent(10);
 
-  if (feedTags) {
-    const tagList = feedTags.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-    if (tagList.length > 0) {
-      trending = dbProvider.getFeedByTags(tagList, limitNum);
-      recent = trending;
-    } else {
-      trending = dbProvider.getFeedTrending(limitNum);
-      recent = dbProvider.getFeedRecent(limitNum);
-    }
-  } else {
-    trending = dbProvider.getFeedTrending(limitNum);
-    recent = dbProvider.getFeedRecent(limitNum);
-  }
+  // Helper to dedup and ensure no overlap with Hero
+  const heroId = heroItems[0]?.id;
+  const dedup = (items: BookmarkRow[]) => items.filter(i => i.id !== heroId);
 
-  // Deduplicate by URL across trending and recent
-  const seen = new Set<string>();
-  const deduped: BookmarkRow[] = [];
-  for (const item of [...trending, ...recent]) {
-    if (item.url && !seen.has(item.url.toLowerCase())) {
-      seen.add(item.url.toLowerCase());
-      deduped.push(item);
-    }
-  }
-
-  res.json({ trending: deduped, recent: deduped });
+  res.json({
+    sections: [
+      { id: "hero", type: "hero", title: "Top Trending", items: heroItems },
+      { id: "personalized", type: "grid", title: "For You", items: dedup(personalizedItems) },
+      { id: "flashback", type: "highlight", title: "Blast from the past", items: dedup(flashbackItems) },
+      { id: "recent", type: "grid", title: "Recently Discovered", items: dedup(recentItems) }
+    ]
+  });
 });
 
 router.post("/report", (req: Request, res: Response) => {

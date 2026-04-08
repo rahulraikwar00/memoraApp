@@ -57,6 +57,9 @@ export interface DatabaseProvider {
   getFeedByTags(tags: string[], limit: number): BookmarkRow[];
   getFeedTrending(limit: number): BookmarkRow[];
   getFeedRecent(limit: number): BookmarkRow[];
+  getFlashbackBookmarks(userId: string | null, limit: number): BookmarkRow[];
+  getTrendingByCategory(category: string, limit: number): BookmarkRow[];
+  getPersonalizedMix(userId: string | null, limit: number): BookmarkRow[];
 
   // ── Votes ───────────────────────────────────────────────────────────────
   toggleVote(userId: string, itemId: string): void;

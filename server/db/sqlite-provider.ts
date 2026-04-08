@@ -201,6 +201,52 @@ export class SqliteProvider implements DatabaseProvider {
       .limit(limit)
       .all() as unknown as BookmarkRow[];
   }
+  
+  getFlashbackBookmarks(userId: string | null, limit: number): BookmarkRow[] {
+    // Flashback: Bookmarks from roughly 7-30 days ago with high engagement
+    const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const monthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    return db.select()
+      .from(withTags)
+      .where(and(
+        lt(withTags.created_at, weekAgo),
+        sql`${withTags.save_count} > 0`
+      ))
+      .orderBy(sql`RANDOM()`)
+      .limit(limit)
+      .all() as unknown as BookmarkRow[];
+  }
+
+  getTrendingByCategory(category: string, limit: number): BookmarkRow[] {
+    return db.selectDistinct()
+      .from(withTags)
+      .innerJoin(bookmarkTags, eq(withTags.id, bookmarkTags.bookmarkId))
+      .where(eq(bookmarkTags.tag, category.toLowerCase()))
+      .orderBy(desc(withTags.save_count))
+      .limit(limit)
+      .all() as unknown as BookmarkRow[];
+  }
+
+  getPersonalizedMix(userId: string | null, limit: number): BookmarkRow[] {
+    if (!userId) return this.getFeedTrending(limit);
+    
+    const topTags = this.getUserTopTags(userId, 3).map(t => t.tag);
+    if (topTags.length === 0) return this.getFeedTrending(limit);
+    
+    // Mix of personalized tags and global trending
+    const personalized = this.getFeedByTags(topTags, Math.ceil(limit * 0.7));
+    const trending = this.getFeedTrending(Math.ceil(limit * 0.3));
+    
+    // Deduplicate and shuffle
+    const combined = [...personalized, ...trending];
+    const seen = new Set<string>();
+    return combined.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }).slice(0, limit);
+  }
 
   // Votes
   toggleVote(userId: string, itemId: string): void {

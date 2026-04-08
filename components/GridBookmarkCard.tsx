@@ -39,6 +39,9 @@ interface GridBookmarkCardProps {
   isSaved?: boolean;
   saveCount?: number;
   showShareInHeader?: boolean;
+  isHero?: boolean;
+  isHighlighted?: boolean;
+  showActiveRecall?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -93,15 +96,20 @@ export default function GridBookmarkCard({
   isSaved,
   saveCount,
   showShareInHeader,
+  isHero,
+  isHighlighted,
+  showActiveRecall,
 }: GridBookmarkCardProps) {
-  const { colors, spacing } = useThemeStore();
-  const CARD_WIDTH =
-    (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) /
-    NUM_COLUMNS;
+  const { colors, spacing, typography } = useThemeStore();
+  const CARD_WIDTH = isHero
+    ? SCREEN_WIDTH - spacing.lg * 2
+    : (SCREEN_WIDTH - spacing.lg * 2 - CARD_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
   const scale = useSharedValue(1);
 
   const contentType = getContentType(bookmark);
-  const CARD_HEIGHT = CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
+  const CARD_HEIGHT = isHero 
+    ? 220 
+    : CARD_HEIGHTS[contentType] || CARD_HEIGHTS.link;
 
   const { currentlyPlayingId, isPlaying: globalIsPlaying, position, duration, seekTo } = useAudioStore();
   const isCurrentlyPlaying = currentlyPlayingId === bookmark.id;
@@ -114,6 +122,9 @@ export default function GridBookmarkCard({
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    shadowOpacity: isHighlighted ? withSpring(0.3) : withSpring(0.1),
+    shadowRadius: isHighlighted ? withSpring(10) : withSpring(4),
+    shadowColor: isHighlighted ? colors.accent : colors.textPrimary,
   }));
 
   const handlePressIn = () => {
@@ -185,13 +196,20 @@ export default function GridBookmarkCard({
   };
 
   const renderPreview = () => {
+    if (showActiveRecall) return (
+      <View style={[styles.activeRecallPlaceholder, { backgroundColor: colors.accent + '10', height: isHero ? 140 : 80 }]}>
+        <Ionicons name="help-circle-outline" size={32} color={colors.accent} />
+        <Text style={[styles.activeRecallText, { color: colors.accent }]}>Tap to Reveal</Text>
+      </View>
+    );
+
     if (contentType === 'image') {
       const imageUri = bookmark.local_path || bookmark.image_url;
       if (!imageUri) return null;
       return (
         <Image
           source={{ uri: imageUri }}
-          style={styles.image}
+          style={[styles.image, { height: isHero ? 200 : 160 }]}
           contentFit="cover"
           transition={200}
         />
@@ -199,18 +217,18 @@ export default function GridBookmarkCard({
     }
 
     if (contentType === 'voice') {
-      return null; // Removed redundant voice preview, controls are now in main body
+      return null;
     }
 
     if (contentType === 'note') {
-      return null; // Removed redundant note preview, title/icon in header is enough
+      return null;
     }
 
     if (bookmark.image_url) {
       return (
         <Image
           source={{ uri: bookmark.image_url }}
-          style={styles.image}
+          style={[styles.image, { height: isHero ? 200 : 160 }]}
           contentFit="cover"
           transition={200}
         />
@@ -228,9 +246,10 @@ export default function GridBookmarkCard({
           animatedStyle,
           {
             backgroundColor: colors.card,
-            borderColor: colors.border,
+            borderColor: isHighlighted ? colors.accent : colors.border,
             width: CARD_WIDTH,
             minHeight: CARD_HEIGHT,
+            borderWidth: isHighlighted ? 2 : 1,
           },
         ]}
         onPress={handleCardPress}
@@ -243,7 +262,7 @@ export default function GridBookmarkCard({
         {renderPreview()}
         <View style={[styles.content, { padding: spacing.sm }]}>
           <View style={styles.header}>
-            {contentType === 'link' && faviconUrl ? (
+            {!showActiveRecall && (contentType === 'link' && faviconUrl ? (
               <Image
                 source={{ uri: faviconUrl }}
                 style={styles.favicon}
@@ -257,38 +276,31 @@ export default function GridBookmarkCard({
                   color={colors.accent} 
                 />
               </View>
-            )}
+            ))}
             <Text
               style={[styles.domain, { color: colors.textTertiary }]}
               numberOfLines={1}
             >
               {contentType === 'link' ? domain : getContentLabel(contentType)}
             </Text>
+            
+            {saveCount !== undefined && saveCount >= 5 && (
+              <View style={[styles.badge, { backgroundColor: colors.accent + '20' }]}>
+                <Text style={[styles.badgeText, { color: colors.accent }]}>
+                  {saveCount >= 20 ? '🔥 HOT' : '📈 TRENDING'}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.timestampContainer}>
               <Text style={[styles.timestamp, { color: colors.textTertiary }]}>
                 {formatTimestamp(bookmark.created_at)}
               </Text>
             </View>
-            {variant === 'feed' && showShareInHeader && onShare && (
-              <Pressable
-                style={styles.headerShareButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onShare();
-                }}
-              >
-                <Ionicons
-                  name="share-outline"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
-            )}
           </View>
           
           <View style={styles.titleContainer}>
-            {contentType === 'voice' && (
+            {contentType === 'voice' && !showActiveRecall && (
               <Pressable
                 style={[styles.miniPlayButton, { backgroundColor: colors.accent }]}
                 onPress={(e) => {
@@ -304,10 +316,15 @@ export default function GridBookmarkCard({
               </Pressable>
             )}
             <Text
-              style={[styles.title, { color: colors.textPrimary }]}
-              numberOfLines={2}
+              style={[
+                styles.title, 
+                { color: colors.textPrimary },
+                isHero && { fontSize: 18, lineHeight: 24, fontWeight: '700' },
+                showActiveRecall && { color: colors.textTertiary, fontStyle: 'italic' }
+              ]}
+              numberOfLines={isHero ? 3 : 2}
             >
-              {bookmark.title || bookmark.url || 'Untitled'}
+              {showActiveRecall ? 'Active Recall Hidden' : (bookmark.title || bookmark.url || 'Untitled')}
             </Text>
           </View>
 
@@ -558,5 +575,26 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 10,
     fontWeight: '400',
+  },
+  activeRecallPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  activeRecallText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
   },
 });

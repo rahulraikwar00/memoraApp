@@ -1,3 +1,4 @@
+console.log("[IMPORT] app/(tabs)/index.tsx");
 import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -42,6 +43,11 @@ export default function SearchScreen() {
   const [query, setQuery] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.log("[LIBRARY] Mounting index.tsx, loading bookmarks...");
+    useBookmarkStore.getState().loadBookmarks();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

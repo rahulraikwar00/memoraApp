@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Bookmark, getBookmarks, createBookmark, deleteBookmark, toggleBookmarkPublic, toggleBookmarkFavorite, searchBookmarks } from '../lib/db';
+import { Bookmark, createBookmark, deleteBookmark, getBookmarks, searchBookmarks, toggleBookmarkFavorite, toggleBookmarkPublic } from '../lib/db';
 
 interface BookmarkState {
   bookmarks: Bookmark[];

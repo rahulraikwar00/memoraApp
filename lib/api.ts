@@ -1,4 +1,3 @@
-import { Constants } from "expo-constants";
 import { Platform } from "react-native";
 import { useAuthStore } from "../stores/useAuthStore";
 
@@ -113,9 +112,15 @@ export interface FeedItem {
   created_at: number;
 }
 
+export interface FeedSection {
+  id: string;
+  type: 'hero' | 'grid' | 'highlight' | 'tags_scroll';
+  title: string;
+  items: FeedItem[];
+}
+
 export interface FeedResponse {
-  trending: FeedItem[];
-  recent: FeedItem[];
+  sections: FeedSection[];
 }
 
 export interface PreviewMetadata {
