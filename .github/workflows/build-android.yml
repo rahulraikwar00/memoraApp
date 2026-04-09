@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build type'
+        description: "Build type"
         required: true
         type: choice
         options:
@@ -12,7 +12,7 @@ on:
           - production
           - both
       clean_install:
-        description: 'Clean install packages'
+        description: "Clean install packages"
         required: true
         type: boolean
         default: false
@@ -27,14 +27,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
@@ -44,7 +44,9 @@ jobs:
 
       - name: Clean install (optional)
         if: inputs.clean_install == true
-        run: rm -rf node_modules && npm ci
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
 
       - name: Prebuild Android
         run: npx expo prebuild --platform android --clean
@@ -66,25 +68,66 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
 
+      # ✅ Upload Development APK as Artifact
       - name: Upload Development APK
         if: inputs.build_type == 'development' || inputs.build_type == 'both'
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@v4
         with:
-          files: android/app/build/outputs/apk/debug/app-debug.apk
-          tag_name: v${{ steps.version.outputs.version }}-dev
-          name: Development Build v${{ steps.version.outputs.version }}
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: app-debug-v${{ steps.version.outputs.version }}-${{ steps.version.outputs.timestamp }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          compression-level: 0 # No compression for APK files
 
+      # ✅ Upload Production APK as Artifact
       - name: Upload Production APK
         if: inputs.build_type == 'production' || inputs.build_type == 'both'
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@v4
         with:
-          files: android/app/build/outputs/apk/release/app-release-unsigned.apk
-          tag_name: v${{ steps.version.outputs.version }}-release
-          name: Release Build v${{ steps.version.outputs.version }}
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: app-release-v${{ steps.version.outputs.version }}-${{ steps.version.outputs.timestamp }}
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
+          compression-level: 0
+
+      # ✅ Optional: Upload mapping files for production builds
+      - name: Upload ProGuard Mapping (Production)
+        if: inputs.build_type == 'production' || inputs.build_type == 'both'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping-v${{ steps.version.outputs.version }}-${{ steps.version.outputs.timestamp }}
+          path: android/app/build/outputs/mapping/release/mapping.txt
+          retention-days: 90
+          if-no-files-found: ignore
+
+      # ✅ Optional: Create a summary of the build
+      - name: Create Build Summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | ${{ steps.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Type** | ${{ inputs.build_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Timestamp** | ${{ steps.version.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Clean Install** | ${{ inputs.clean_install }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.build_type }}" = "development" ] || [ "${{ inputs.build_type }}" = "both" ]; then
+            echo "### ✅ Development APK" >> $GITHUB_STEP_SUMMARY
+            echo "- Debug build for testing" >> $GITHUB_STEP_SUMMARY
+            echo "- Can be installed directly on devices" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ inputs.build_type }}" = "production" ] || [ "${{ inputs.build_type }}" = "both" ]; then
+            echo "### ⚠️ Production APK" >> $GITHUB_STEP_SUMMARY
+            echo "- **Unsigned APK** - cannot be installed directly" >> $GITHUB_STEP_SUMMARY
+            echo "- Must be signed before installation" >> $GITHUB_STEP_SUMMARY
+            echo "- Or use AAB for Play Store" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### 📥 Download Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Scroll down to the **Artifacts** section below to download the APK files" >> $GITHUB_STEP_SUMMARY
