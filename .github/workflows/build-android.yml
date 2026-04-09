@@ -1,0 +1,90 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+          - both
+      clean_install:
+        description: 'Clean install packages'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clean install (optional)
+        if: inputs.clean_install == true
+        run: rm -rf node_modules && npm ci
+
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build Development APK
+        if: inputs.build_type == 'development' || inputs.build_type == 'both'
+        run: |
+          cd android && ./gradlew assembleDebug
+          cd ..
+
+      - name: Build Production APK
+        if: inputs.build_type == 'production' || inputs.build_type == 'both'
+        run: |
+          cd android && ./gradlew assembleRelease
+          cd ..
+
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Upload Development APK
+        if: inputs.build_type == 'development' || inputs.build_type == 'both'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v${{ steps.version.outputs.version }}-dev
+          name: Development Build v${{ steps.version.outputs.version }}
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Production APK
+        if: inputs.build_type == 'production' || inputs.build_type == 'both'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          tag_name: v${{ steps.version.outputs.version }}-release
+          name: Release Build v${{ steps.version.outputs.version }}
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

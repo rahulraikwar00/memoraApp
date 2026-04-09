@@ -1,9 +1,13 @@
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import { useAuthStore } from "../stores/useAuthStore";
 
 const getApiUrl = (): string => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl) return envUrl;
+
+  const configUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
+  if (configUrl) return configUrl;
 
   if (Platform.OS === "android") {
     return "http://10.0.2.2:3000";
@@ -114,7 +118,7 @@ export interface FeedItem {
 
 export interface FeedSection {
   id: string;
-  type: 'hero' | 'grid' | 'highlight' | 'tags_scroll';
+  type: "hero" | "grid" | "highlight" | "tags_scroll";
   title: string;
   items: FeedItem[];
 }
@@ -135,13 +139,13 @@ export const feedApi = {
   getFeed: (tags?: string[], limit?: number) => {
     const params = new URLSearchParams();
     if (tags && tags.length > 0) {
-      params.set('tags', tags.join(','));
+      params.set("tags", tags.join(","));
     }
     if (limit) {
-      params.set('limit', limit.toString());
+      params.set("limit", limit.toString());
     }
     const query = params.toString();
-    return api.get<FeedResponse>(`/api/feed${query ? `?${query}` : ''}`);
+    return api.get<FeedResponse>(`/api/feed${query ? `?${query}` : ""}`);
   },
   vote: (id: string) =>
     api.post<{ success: boolean }>(`/api/vote`, { item_id: id }),
@@ -177,9 +181,14 @@ export interface RegisterUserResponse {
 export const authApi = {
   checkUsername: (username: string) =>
     api.get<CheckUsernameResponse>(
-      `/api/auth/check-username?username=${encodeURIComponent(username)}`
+      `/api/auth/check-username?username=${encodeURIComponent(username)}`,
     ),
-  register: (id: string, username: string, avatarUrl?: string, interests?: string[]) =>
+  register: (
+    id: string,
+    username: string,
+    avatarUrl?: string,
+    interests?: string[],
+  ) =>
     api.post<RegisterUserResponse>("/api/auth/register", {
       id,
       username,
