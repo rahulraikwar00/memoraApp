@@ -1,0 +1,74 @@
+name: EAS Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Build profile"
+        required: true
+        type: choice
+        options:
+          - production
+          - preview
+          - development
+      platform:
+        description: "Platform"
+        required: true
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g @expo/eas-cli
+
+      - name: Login to Expo
+        run: eas login --access-token ${{ secrets.EAS_TOKEN }}
+
+      - name: Build Android
+        run: eas build --platform android --profile ${{ github.event.inputs.profile || 'production' }} --non-interactive
+
+  ios:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g @expo/eas-cli
+
+      - name: Login to Expo
+        run: eas login --access-token ${{ secrets.EAS_TOKEN }}
+
+      - name: Build iOS
+        run: eas build --platform ios --profile ${{ github.event.inputs.profile || 'production' }} --non-interactive</content>
